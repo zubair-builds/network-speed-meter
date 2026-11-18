@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Network Speed Meter",
+    "slug": "network-speed-meter",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a1a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a1a1a"
+      },
+      "package": "com.yourname.networkspeedmeter"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
