@@ -1,6 +1,5 @@
 package expo.modules.networkusage
 
-import android.content.Context
 import android.content.Intent
 import android.net.TrafficStats
 import android.os.Build
@@ -24,6 +23,15 @@ class ExpoNetworkUsageModule : Module() {
       val rx = TrafficStats.getMobileRxBytes()
       val tx = TrafficStats.getMobileTxBytes()
       promise.resolve(mapOf("rx" to rx, "tx" to tx))
+    }
+
+    AsyncFunction("getTodayTotals") { promise: Promise ->
+      val svc = SpeedService.instance
+      if (svc != null) {
+        promise.resolve(svc.getTodayTotals())
+      } else {
+        promise.resolve(mapOf("mobile" to 0L, "wifi" to 0L))
+      }
     }
 
     AsyncFunction("canDrawOverlay") { promise: Promise ->
