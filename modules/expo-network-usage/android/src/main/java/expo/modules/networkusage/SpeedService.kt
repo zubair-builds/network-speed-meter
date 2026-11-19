@@ -29,7 +29,7 @@ class SpeedService : Service() {
   private var todayDate = ""
 
   private var iconSize = 48
-  private var iconStyle = "normal" // normal, bold, compact
+  private var iconStyle = "normal"
 
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
@@ -269,7 +269,7 @@ class SpeedService : Service() {
       .setSmallIcon(icon)
       .setOngoing(true)
       .setContentIntent(pending)
-      .setPriority(NotificationCompat.PRIORITY_MIN)
+      .setPriority(NotificationCompat.PRIORITY_LOW)
       .setSilent(true)
       .build()
   }
@@ -279,7 +279,7 @@ class SpeedService : Service() {
       val channel = NotificationChannel(
         CHANNEL_ID,
         "Speed Meter",
-        NotificationManager.IMPORTANCE_MIN
+        NotificationManager.IMPORTANCE_LOW
       ).apply {
         setSound(null, null)
         enableVibration(false)
