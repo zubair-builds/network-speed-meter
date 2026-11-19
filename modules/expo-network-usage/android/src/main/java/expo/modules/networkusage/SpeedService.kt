@@ -3,6 +3,7 @@ package expo.modules.networkusage
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.net.TrafficStats
@@ -52,7 +53,12 @@ class SpeedService : Service() {
     instance = this
     loadTodayTotals()
     createNotificationChannel()
-    startForeground(NOTIF_ID, buildNotification("0 B/s", formatUsage()))
+    val notification = buildNotification("0 B/s", formatUsage())
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+    } else {
+      startForeground(NOTIF_ID, notification)
+    }
     startLoop()
   }
 

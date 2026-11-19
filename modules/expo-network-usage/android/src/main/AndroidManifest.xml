@@ -6,7 +6,7 @@
 
   <application>
     <service
-      android:name=".SpeedService"
+      android:name="expo.modules.networkusage.SpeedService"
       android:exported="false"
       android:foregroundServiceType="specialUse">
       <property
