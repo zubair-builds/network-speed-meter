@@ -123,7 +123,6 @@ class SpeedService : Service() {
       return
     }
 
-    // Some devices don't report mobile counters
     val mobileSupported = mRx >= 0 && mTx >= 0
     if (!mobileSupported) {
       mRx = 0L
@@ -158,7 +157,7 @@ class SpeedService : Service() {
         val deltaWifi = if (mobileSupported) {
           (deltaTotal - deltaMobile).coerceAtLeast(0)
         } else {
-          deltaTotal // all traffic is WiFi when mobile counters unavailable
+          deltaTotal
         }
 
         todayMobile += deltaMobile
@@ -211,6 +210,15 @@ class SpeedService : Service() {
     unitView = null
   }
 
+  private fun getStatusBarHeight(): Int {
+    var result = 0
+    val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+    if (resourceId > 0) {
+      result = resources.getDimensionPixelSize(resourceId)
+    }
+    return result
+  }
+
   private fun updateOverlay(speed: String) {
     try {
       if (!canDraw()) {
@@ -227,25 +235,26 @@ class SpeedService : Service() {
         val layout = LinearLayout(this).apply {
           orientation = LinearLayout.VERTICAL
           setBackgroundColor(Color.TRANSPARENT)
-          setPadding(2, 0, 2, 0)
+          setPadding(4, 0, 4, 0)
         }
         val num = TextView(this).apply {
           setTextColor(Color.WHITE)
-          textSize = 11f
-          setShadowLayer(1.2f, 0f, 0f, Color.BLACK)
+          textSize = 10f
+          setShadowLayer(2f, 0f, 0f, Color.BLACK)
           gravity = Gravity.CENTER
           text = number
         }
         val unitTv = TextView(this).apply {
           setTextColor(Color.WHITE)
-          textSize = 8f
-          setShadowLayer(1.2f, 0f, 0f, Color.BLACK)
+          textSize = 7f
+          setShadowLayer(2f, 0f, 0f, Color.BLACK)
           gravity = Gravity.CENTER
           text = unit
         }
         layout.addView(num)
         layout.addView(unitTv)
 
+        val statusBarHeight = getStatusBarHeight()
         val params = WindowManager.LayoutParams(
           WindowManager.LayoutParams.WRAP_CONTENT,
           WindowManager.LayoutParams.WRAP_CONTENT,
@@ -255,12 +264,13 @@ class SpeedService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE,
           WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
           PixelFormat.TRANSLUCENT
         ).apply {
           gravity = Gravity.TOP or Gravity.START
-          x = 88
-          y = 1
+          x = 120
+          y = (statusBarHeight / 2) - 16
         }
 
         windowManager?.addView(layout, params)
@@ -293,10 +303,11 @@ class SpeedService : Service() {
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle("Speed: $speed")
       .setContentText(usage)
-      .setSmallIcon(android.R.drawable.stat_sys_download)
+      .setSmallIcon(android.R.drawable.stat_notify_more)
       .setOngoing(true)
       .setContentIntent(pending)
       .setPriority(NotificationCompat.PRIORITY_MIN)
+      .setSilent(true)
       .build()
   }
 
@@ -305,10 +316,11 @@ class SpeedService : Service() {
       val channel = NotificationChannel(
         CHANNEL_ID,
         "Speed Meter",
-        NotificationManager.IMPORTANCE_LOW
+        NotificationManager.IMPORTANCE_MIN
       ).apply {
         setSound(null, null)
         enableVibration(false)
+        setShowBadge(false)
       }
       getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
