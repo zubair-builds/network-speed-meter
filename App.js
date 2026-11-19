@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
   Alert,
+  AppState,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,13 +25,23 @@ Notifications.setNotificationHandler({
 });
 
 const formatBytes = (bytes) => {
-  if (bytes === 0) return '0 MB';
+  if (!bytes || bytes === 0) return '0 MB';
   const mb = bytes / (1024 * 1024);
   if (mb < 1024) return `${mb.toFixed(1)} MB`;
   return `${(mb / 1024).toFixed(2)} GB`;
 };
 
-const formatDate = (date) => {
+const toISODate = (date) => {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const displayDate = (iso) => {
+  const [y, m, d] = iso.split('-');
+  const date = new Date(y, m - 1, d);
   return date.toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
@@ -56,10 +67,12 @@ export default function App() {
   });
 
   const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
+  const dailyDataRef = useRef([]);
+  const connectionTypeRef = useRef('unknown');
   const intervalRef = useRef(null);
-  const overlayEnabled = useRef(false);
   const lastOverlayUpdate = useRef(0);
   const lastNotifUpdate = useRef(0);
+  const notifScheduled = useRef(false);
 
   const { downStr, upStr } = useNetworkTraffic({
     interval: 1000,
@@ -69,6 +82,14 @@ export default function App() {
 
   const downloadSpeed = downStr || '0 KB/s';
   const uploadSpeed = upStr || '0 KB/s';
+
+  useEffect(() => {
+    dailyDataRef.current = dailyData;
+  }, [dailyData]);
+
+  useEffect(() => {
+    connectionTypeRef.current = connectionType;
+  }, [connectionType]);
 
   useEffect(() => {
     (async () => {
@@ -98,30 +119,25 @@ export default function App() {
               },
             ]
           );
-        } else {
-          overlayEnabled.current = true;
-          updateOverlay();
         }
       } catch (e) {
         console.log('Init error:', e);
       }
     })();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') {
+        NetworkUsage.hideOverlay?.().catch(() => {});
+      }
+    });
+
+    return () => {
+      sub.remove();
+      NetworkUsage.hideOverlay?.().catch(() => {});
+    };
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const now = Date.now();
-    if (now - lastOverlayUpdate.current > 1500) {
-      lastOverlayUpdate.current = now;
-      updateOverlay();
-    }
-    if (now - lastNotifUpdate.current > 4000) {
-      lastNotifUpdate.current = now;
-      showSpeedNotification();
-    }
-  }, [downloadSpeed, uploadSpeed, summary]);
-
-  const updateOverlay = async () => {
+  const updateOverlay = useCallback(async () => {
     try {
       if (!NetworkUsage?.canDrawOverlay) return;
       const can = await NetworkUsage.canDrawOverlay();
@@ -129,17 +145,21 @@ export default function App() {
       const { number, unit } = splitSpeed(downloadSpeed);
       const text = `${number}\n${unit}`;
       await NetworkUsage.showOverlay?.(text);
-      overlayEnabled.current = true;
     } catch (e) {
       console.log('Overlay error:', e?.message || e);
     }
-  };
+  }, [downloadSpeed]);
 
-  const showSpeedNotification = async () => {
+  const showSpeedNotification = useCallback(async () => {
     try {
-      const today = dailyData.find(d => d.date === formatDate(new Date()));
+      const todayISO = toISODate(new Date());
+      const today = dailyDataRef.current.find(d => d.date === todayISO);
       const mobileToday = today?.mobile || 0;
       const wifiToday = today?.wifi || 0;
+
+      if (notifScheduled.current) {
+        await Notifications.dismissNotificationAsync('speed-meter').catch(() => {});
+      }
 
       await Notifications.scheduleNotificationAsync({
         identifier: 'speed-meter',
@@ -152,10 +172,24 @@ export default function App() {
         },
         trigger: null,
       });
+      notifScheduled.current = true;
     } catch (e) {
       console.log('Notification error:', e?.message || e);
     }
-  };
+  }, [downloadSpeed]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const now = Date.now();
+    if (now - lastOverlayUpdate.current > 1500) {
+      lastOverlayUpdate.current = now;
+      updateOverlay();
+    }
+    if (now - lastNotifUpdate.current > 4000) {
+      lastNotifUpdate.current = now;
+      showSpeedNotification();
+    }
+  }, [downloadSpeed, uploadSpeed, summary, updateOverlay, showSpeedNotification]);
 
   useEffect(() => {
     loadData();
@@ -168,15 +202,15 @@ export default function App() {
       setConnectionType(state.type);
     });
 
-    intervalRef.current = setInterval(async () => {
-      await accumulateUsage();
+    intervalRef.current = setInterval(() => {
+      accumulateUsage();
     }, 5000);
 
     return () => {
       unsubscribe();
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [connectionType]);
+  }, []);
 
   const loadData = async () => {
     try {
@@ -184,9 +218,11 @@ export default function App() {
       if (stored) {
         const parsed = JSON.parse(stored);
         setDailyData(parsed);
+        dailyDataRef.current = parsed;
         calculateSummary(parsed);
       } else {
         setDailyData([]);
+        dailyDataRef.current = [];
         calculateSummary([]);
       }
     } catch (e) {
@@ -211,13 +247,13 @@ export default function App() {
         const deltaWifi = Math.max(0, deltaTotal - deltaMobile);
 
         if (deltaTotal > 0) {
-          const todayStr = formatDate(new Date());
-          let data = [...dailyData];
-          let todayEntry = data.find(d => d.date === todayStr);
+          const todayISO = toISODate(new Date());
+          let data = [...dailyDataRef.current];
+          let todayEntry = data.find(d => d.date === todayISO);
 
           if (!todayEntry) {
             todayEntry = {
-              date: todayStr,
+              date: todayISO,
               dateObj: new Date().toISOString(),
               mobile: 0,
               wifi: 0,
@@ -225,9 +261,10 @@ export default function App() {
             data.unshift(todayEntry);
           }
 
-          if (connectionType === 'cellular') {
+          const conn = connectionTypeRef.current;
+          if (conn === 'cellular') {
             todayEntry.mobile += deltaMobile || deltaTotal;
-          } else if (connectionType === 'wifi') {
+          } else if (conn === 'wifi') {
             todayEntry.wifi += deltaWifi || deltaTotal;
           } else {
             todayEntry.wifi += deltaWifi;
@@ -235,6 +272,7 @@ export default function App() {
           }
 
           if (data.length > 60) data = data.slice(0, 60);
+          dailyDataRef.current = data;
           setDailyData([...data]);
           calculateSummary(data);
           await AsyncStorage.setItem('dailyUsage', JSON.stringify(data));
@@ -294,7 +332,7 @@ export default function App() {
 
   const renderRow = ({ item }) => (
     <View style={styles.row}>
-      <Text style={[styles.cell, styles.dateCell]}>{item.date}</Text>
+      <Text style={[styles.cell, styles.dateCell]}>{displayDate(item.date)}</Text>
       <View style={[styles.heatCell, { backgroundColor: getHeatColor(item.mobile) }]}>
         <Text style={[styles.cellText, { color: getTextColor(item.mobile) }]}>{formatBytes(item.mobile)}</Text>
       </View>
@@ -315,7 +353,7 @@ export default function App() {
           <Text style={styles.clockText}>
             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </Text>
-          <Text style={styles.dateSmall}>{formatDate(currentTime)}</Text>
+          <Text style={styles.dateSmall}>{displayDate(toISODate(currentTime))}</Text>
         </View>
         <View style={styles.speedSection}>
           <Text style={styles.speedLabel}>\u2193 {downloadSpeed}</Text>
