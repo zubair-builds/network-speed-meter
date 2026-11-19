@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,6 +60,18 @@ const parseISODate = (iso) => {
   return new Date(y, m - 1, d);
 };
 
+const SIZES = [
+  { label: 'S', value: 36 },
+  { label: 'M', value: 48 },
+  { label: 'L', value: 60 },
+];
+
+const STYLES = [
+  { label: 'Normal', value: 'normal' },
+  { label: 'Bold', value: 'bold' },
+  { label: 'Compact', value: 'compact' },
+];
+
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [connectionType, setConnectionType] = useState('unknown');
@@ -70,6 +83,9 @@ export default function App() {
   });
   const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
+  const [iconSize, setIconSize] = useState(48);
+  const [iconStyle, setIconStyle] = useState('normal');
+  const [showSettings, setShowSettings] = useState(false);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
@@ -84,27 +100,13 @@ export default function App() {
       if (Platform.OS !== 'android') return;
       try {
         await Notifications.requestPermissionsAsync();
-
-        const can = await NetworkUsage.canDrawOverlay?.();
-        if (!can) {
-          Alert.alert(
-            'Status Bar Overlay',
-            'Allow "Display over other apps" so speed can appear in the status bar.',
-            [
-              { text: 'Later', style: 'cancel' },
-              {
-                text: 'Allow',
-                onPress: async () => {
-                  try {
-                    await NetworkUsage.requestOverlayPermission?.();
-                  } catch (e) {}
-                },
-              },
-            ]
-          );
-        }
-
         await NetworkUsage.startSpeedService?.();
+
+        const settings = await NetworkUsage.getIconSettings?.();
+        if (settings) {
+          setIconSize(settings.size || 48);
+          setIconStyle(settings.style || 'normal');
+        }
       } catch (e) {
         console.log('Init error:', e);
       }
@@ -239,6 +241,20 @@ export default function App() {
     setSummary({ last7, last30, thisMonth });
   };
 
+  const changeSize = async (size) => {
+    setIconSize(size);
+    try {
+      await NetworkUsage.setIconSize?.(size);
+    } catch (e) {}
+  };
+
+  const changeStyle = async (style) => {
+    setIconStyle(style);
+    try {
+      await NetworkUsage.setIconStyle?.(style);
+    } catch (e) {}
+  };
+
   const getHeatColor = (bytes) => {
     if (!bytes || bytes <= 0) return '#0d1117';
     const mb = bytes / (1024 * 1024);
@@ -286,6 +302,40 @@ export default function App() {
           <Text style={styles.netType}>{connectionType.toUpperCase()}</Text>
         </View>
       </View>
+
+      <TouchableOpacity style={styles.settingsToggle} onPress={() => setShowSettings(!showSettings)}>
+        <Text style={styles.settingsToggleText}>{showSettings ? 'Hide Settings' : 'Icon Settings'}</Text>
+      </TouchableOpacity>
+
+      {showSettings && (
+        <View style={styles.settingsPanel}>
+          <Text style={styles.settingsLabel}>Icon Size</Text>
+          <View style={styles.optionRow}>
+            {SIZES.map(s => (
+              <TouchableOpacity
+                key={s.value}
+                style={[styles.optionBtn, iconSize === s.value && styles.optionBtnActive]}
+                onPress={() => changeSize(s.value)}
+              >
+                <Text style={[styles.optionText, iconSize === s.value && styles.optionTextActive]}>{s.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.settingsLabel}>Style</Text>
+          <View style={styles.optionRow}>
+            {STYLES.map(s => (
+              <TouchableOpacity
+                key={s.value}
+                style={[styles.optionBtn, iconStyle === s.value && styles.optionBtnActive]}
+                onPress={() => changeStyle(s.value)}
+              >
+                <Text style={[styles.optionText, iconStyle === s.value && styles.optionTextActive]}>{s.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
       <View style={styles.header}>
         <Text style={styles.title}>Internet Speed Meter</Text>
       </View>
@@ -353,6 +403,31 @@ const styles = StyleSheet.create({
   speedSection: { alignItems: 'flex-end' },
   speedLabel: { color: '#4CAF50', fontSize: 14, fontWeight: '600' },
   netType: { color: '#64B5F6', fontSize: 12, marginTop: 2 },
+  settingsToggle: {
+    backgroundColor: '#1e1e1e',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  settingsToggleText: { color: '#64B5F6', fontSize: 14 },
+  settingsPanel: {
+    backgroundColor: '#1a1a1a',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  settingsLabel: { color: '#aaa', fontSize: 12, marginBottom: 8, marginTop: 8 },
+  optionRow: { flexDirection: 'row', gap: 8 },
+  optionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  optionBtnActive: { backgroundColor: '#1d4ed8' },
+  optionText: { color: '#aaa', fontSize: 14 },
+  optionTextActive: { color: '#fff', fontWeight: '600' },
   header: { backgroundColor: '#1a1a1a', padding: 14 },
   title: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   tableHeader: {
