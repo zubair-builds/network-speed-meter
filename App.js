@@ -12,13 +12,12 @@ import {
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNetworkTraffic } from '@hoanggbao00/expo-network-traffic';
 import NetworkUsage from './modules/expo-network-usage';
 import * as Notifications from 'expo-notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: false,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),
@@ -29,6 +28,13 @@ const formatBytes = (bytes) => {
   const mb = bytes / (1024 * 1024);
   if (mb < 1024) return `${mb.toFixed(1)} MB`;
   return `${(mb / 1024).toFixed(2)} GB`;
+};
+
+const formatSpeed = (bytesPerSec) => {
+  if (!bytesPerSec || bytesPerSec < 0) return '0 B/s';
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(2)} MB/s`;
 };
 
 const toISODate = (date) => {
@@ -50,9 +56,9 @@ const displayDate = (iso) => {
 };
 
 const splitSpeed = (speedStr) => {
-  if (!speedStr) return { number: '0', unit: 'KB/s' };
+  if (!speedStr) return { number: '0', unit: 'B/s' };
   const match = speedStr.match(/^([\d.]+)\s*(.*)$/);
-  if (match) return { number: match[1], unit: match[2] || 'KB/s' };
+  if (match) return { number: match[1], unit: match[2] || 'B/s' };
   return { number: speedStr, unit: '' };
 };
 
@@ -65,22 +71,15 @@ export default function App() {
     last30: { mobile: 0, wifi: 0 },
     thisMonth: { mobile: 0, wifi: 0 },
   });
+  const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
+  const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
 
-  const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
+  const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, mobile: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
   const intervalRef = useRef(null);
   const lastOverlayUpdate = useRef(0);
   const lastNotifUpdate = useRef(0);
-  const notifScheduled = useRef(false);
-
-  const { downStr, upStr } = useNetworkTraffic({
-    interval: 1000,
-    enabled: Platform.OS === 'android',
-    decimals: 1,
-  });
-
-  const downloadSpeed = downStr || '0 KB/s';
-  const uploadSpeed = upStr || '0 KB/s';
+  const notifId = useRef(null);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -92,8 +91,10 @@ export default function App() {
       try {
         await Notifications.setNotificationChannelAsync('speed', {
           name: 'Network Speed',
-          importance: Notifications.AndroidImportance.DEFAULT,
+          importance: Notifications.AndroidImportance.LOW,
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          sound: null,
+          vibrationPattern: null,
         });
         await Notifications.requestPermissionsAsync();
 
@@ -145,29 +146,28 @@ export default function App() {
     }
   }, [downloadSpeed]);
 
-  const showSpeedNotification = useCallback(async () => {
+  const updateNotification = useCallback(async () => {
     try {
       const todayISO = toISODate(new Date());
       const today = dailyDataRef.current.find(d => d.date === todayISO);
       const mobileToday = today?.mobile || 0;
       const wifiToday = today?.wifi || 0;
 
-      if (notifScheduled.current) {
-        await Notifications.dismissNotificationAsync('speed-meter').catch(() => {});
+      // Only schedule once, then just update content if possible
+      if (!notifId.current) {
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `Speed: ${downloadSpeed}`,
+            body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
+            sticky: true,
+            autoDismiss: false,
+            priority: Notifications.AndroidNotificationPriority.MIN,
+            sound: null,
+          },
+          trigger: null,
+        });
+        notifId.current = id;
       }
-
-      await Notifications.scheduleNotificationAsync({
-        identifier: 'speed-meter',
-        content: {
-          title: `Speed: ${downloadSpeed}`,
-          body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
-          sticky: true,
-          autoDismiss: false,
-          priority: Notifications.AndroidNotificationPriority.DEFAULT,
-        },
-        trigger: null,
-      });
-      notifScheduled.current = true;
     } catch (e) {
       console.log('Notification error:', e?.message || e);
     }
@@ -176,15 +176,15 @@ export default function App() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const now = Date.now();
-    if (now - lastOverlayUpdate.current > 1500) {
+    if (now - lastOverlayUpdate.current > 2000) {
       lastOverlayUpdate.current = now;
       updateOverlay();
     }
-    if (now - lastNotifUpdate.current > 4000) {
+    if (now - lastNotifUpdate.current > 10000) {
       lastNotifUpdate.current = now;
-      showSpeedNotification();
+      updateNotification();
     }
-  }, [downloadSpeed, uploadSpeed, summary, updateOverlay, showSpeedNotification]);
+  }, [downloadSpeed, uploadSpeed, summary, updateOverlay, updateNotification]);
 
   useEffect(() => {
     loadData();
@@ -197,9 +197,10 @@ export default function App() {
       setConnectionType(state.type);
     });
 
+    // Speed + usage every 1 second
     intervalRef.current = setInterval(() => {
-      accumulateUsage();
-    }, 5000);
+      updateSpeedAndUsage();
+    }, 1000);
 
     return () => {
       unsubscribe();
@@ -225,7 +226,7 @@ export default function App() {
     }
   };
 
-  const accumulateUsage = async () => {
+  const updateSpeedAndUsage = async () => {
     if (Platform.OS !== 'android') return;
     try {
       if (!NetworkUsage || typeof NetworkUsage.getTotalBytes !== 'function') return;
@@ -235,12 +236,21 @@ export default function App() {
 
       const now = Date.now();
       const last = lastBytesRef.current;
+      const elapsed = (now - last.time) / 1000;
 
-      if (last.total > 0) {
+      if (elapsed > 0 && last.totalRx > 0) {
+        const deltaRx = Math.max(0, total.rx - last.totalRx);
+        const deltaTx = Math.max(0, total.tx - last.totalTx);
+        const rxSpeed = deltaRx / elapsed;
+        const txSpeed = deltaTx / elapsed;
+
+        setDownloadSpeed(formatSpeed(rxSpeed));
+        setUploadSpeed(formatSpeed(txSpeed));
+
+        // Accumulate daily usage
         const totalNow = total.rx + total.tx;
         const mobileNow = mobile.rx + mobile.tx;
-
-        const deltaTotal = Math.max(0, totalNow - last.total);
+        const deltaTotal = Math.max(0, totalNow - (last.totalRx + last.totalTx));
         const deltaMobile = Math.max(0, mobileNow - last.mobile);
         const deltaWifi = Math.max(0, deltaTotal - deltaMobile);
 
@@ -259,7 +269,6 @@ export default function App() {
             data.unshift(todayEntry);
           }
 
-          // Mobile bytes always from mobile counter; everything else is WiFi
           todayEntry.mobile += deltaMobile;
           todayEntry.wifi += deltaWifi;
 
@@ -272,12 +281,13 @@ export default function App() {
       }
 
       lastBytesRef.current = {
-        total: total.rx + total.tx,
+        totalRx: total.rx,
+        totalTx: total.tx,
         mobile: mobile.rx + mobile.tx,
         time: now,
       };
     } catch (e) {
-      console.log('Usage tracking error:', e.message || e);
+      console.log('Speed/usage error:', e.message || e);
     }
   };
 
@@ -348,8 +358,8 @@ export default function App() {
           <Text style={styles.dateSmall}>{displayDate(toISODate(currentTime))}</Text>
         </View>
         <View style={styles.speedSection}>
-          <Text style={styles.speedLabel}>\u2193 {downloadSpeed}</Text>
-          <Text style={styles.speedLabel}>\u2191 {uploadSpeed}</Text>
+          <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
+          <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
           <Text style={styles.netType}>{connectionType.toUpperCase()}</Text>
         </View>
       </View>
