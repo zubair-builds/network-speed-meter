@@ -41,7 +41,7 @@ class SpeedService : Service() {
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
-  private val MAX_DELTA_BYTES = 50L * 1024 * 1024 // 50 MB sanity cap per tick
+  private val MAX_DELTA_BYTES = 50L * 1024 * 1024
 
   companion object {
     @Volatile
@@ -115,12 +115,19 @@ class SpeedService : Service() {
     val now = System.currentTimeMillis()
     val rx = TrafficStats.getTotalRxBytes()
     val tx = TrafficStats.getTotalTxBytes()
-    val mRx = TrafficStats.getMobileRxBytes()
-    val mTx = TrafficStats.getMobileTxBytes()
+    var mRx = TrafficStats.getMobileRxBytes()
+    var mTx = TrafficStats.getMobileTxBytes()
 
     if (rx < 0 || tx < 0) {
       updateNotification("Unsupported", "TrafficStats not available")
       return
+    }
+
+    // Some devices don't report mobile counters
+    val mobileSupported = mRx >= 0 && mTx >= 0
+    if (!mobileSupported) {
+      mRx = 0L
+      mTx = 0L
     }
 
     val currentDate = todayISO()
@@ -136,10 +143,11 @@ class SpeedService : Service() {
       if (elapsed > 0) {
         var deltaRx = (rx - lastRx).coerceAtLeast(0)
         var deltaTx = (tx - lastTx).coerceAtLeast(0)
-        var deltaMobile = ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
+        var deltaMobile = if (mobileSupported) {
+          ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
+        } else 0L
         var deltaTotal = (deltaRx + deltaTx).coerceAtLeast(0)
 
-        // Sanity cap — ignore spikes from counter resets
         if (deltaTotal > MAX_DELTA_BYTES) {
           deltaRx = 0
           deltaTx = 0
@@ -147,7 +155,11 @@ class SpeedService : Service() {
           deltaTotal = 0
         }
 
-        val deltaWifi = (deltaTotal - deltaMobile).coerceAtLeast(0)
+        val deltaWifi = if (mobileSupported) {
+          (deltaTotal - deltaMobile).coerceAtLeast(0)
+        } else {
+          deltaTotal // all traffic is WiFi when mobile counters unavailable
+        }
 
         todayMobile += deltaMobile
         todayWifi += deltaWifi
@@ -162,8 +174,8 @@ class SpeedService : Service() {
 
     lastRx = rx
     lastTx = tx
-    lastMobileRx = mRx
-    lastMobileTx = mTx
+    lastMobileRx = if (mobileSupported) mRx else 0L
+    lastMobileTx = if (mobileSupported) mTx else 0L
     lastTime = now
   }
 
