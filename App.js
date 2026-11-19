@@ -38,6 +38,13 @@ const formatDate = (date) => {
   });
 };
 
+const splitSpeed = (speedStr) => {
+  if (!speedStr) return { number: '0', unit: 'KB/s' };
+  const match = speedStr.match(/^([\d.]+)\s*(.*)$/);
+  if (match) return { number: match[1], unit: match[2] || 'KB/s' };
+  return { number: speedStr, unit: '' };
+};
+
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [connectionType, setConnectionType] = useState('unknown');
@@ -105,7 +112,8 @@ export default function App() {
     try {
       const can = await NetworkUsage.canDrawOverlay?.();
       if (can) {
-        const text = downloadSpeed;
+        const { number, unit } = splitSpeed(downloadSpeed);
+        const text = `${number}\n${unit}`;
         await NetworkUsage.showOverlay?.(text);
         overlayEnabled.current = true;
       }
