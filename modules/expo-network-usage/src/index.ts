@@ -7,8 +7,6 @@ declare class ExpoNetworkUsageModule extends NativeModule {
   getIconSettings(): Promise<{ size: number; style: string }>;
   setIconSize(size: number): Promise<boolean>;
   setIconStyle(style: string): Promise<boolean>;
-  canDrawOverlay(): Promise<boolean>;
-  requestOverlayPermission(): Promise<boolean>;
   startSpeedService(): Promise<boolean>;
   stopSpeedService(): Promise<boolean>;
 }
