@@ -11,9 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#1a1a1a"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/icon.png"
@@ -25,7 +23,8 @@
       },
       "package": "com.yourname.networkspeedmeter",
       "permissions": [
-        "SYSTEM_ALERT_WINDOW"
+        "SYSTEM_ALERT_WINDOW",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
