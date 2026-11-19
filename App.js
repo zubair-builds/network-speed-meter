@@ -54,6 +54,12 @@ const displayDate = (iso) => {
   });
 };
 
+const startOfDay = (d) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [connectionType, setConnectionType] = useState('unknown');
@@ -173,11 +179,8 @@ export default function App() {
       setDailyData([...data]);
       calculateSummary(data);
 
-      // Persist occasionally
       AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
-    } catch (e) {
-      // service may not be ready yet
-    }
+    } catch (e) {}
   };
 
   const updateSpeed = async () => {
@@ -212,19 +215,20 @@ export default function App() {
   };
 
   const calculateSummary = (data) => {
-    const now = new Date();
+    const now = startOfDay(new Date());
     const last7 = { mobile: 0, wifi: 0 };
     const last30 = { mobile: 0, wifi: 0 };
     const thisMonth = { mobile: 0, wifi: 0 };
 
     data.forEach(item => {
-      const d = new Date(item.dateObj);
-      const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
-      if (diffDays < 7) {
+      const d = startOfDay(new Date(item.dateObj));
+      const diffDays = Math.round((now - d) / (1000 * 60 * 60 * 24));
+
+      if (diffDays >= 0 && diffDays < 7) {
         last7.mobile += item.mobile;
         last7.wifi += item.wifi;
       }
-      if (diffDays < 30) {
+      if (diffDays >= 0 && diffDays < 30) {
         last30.mobile += item.mobile;
         last30.wifi += item.wifi;
       }
