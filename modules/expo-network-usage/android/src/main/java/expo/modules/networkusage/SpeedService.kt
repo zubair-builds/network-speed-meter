@@ -10,11 +10,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.provider.Settings
-import android.view.Gravity
-import android.view.WindowManager
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
 import java.text.SimpleDateFormat
@@ -32,11 +27,6 @@ class SpeedService : Service() {
   private var todayMobile = 0L
   private var todayWifi = 0L
   private var todayDate = ""
-
-  private var overlayView: LinearLayout? = null
-  private var numberView: TextView? = null
-  private var unitView: TextView? = null
-  private var windowManager: WindowManager? = null
 
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
@@ -166,7 +156,6 @@ class SpeedService : Service() {
 
         val rxSpeed = deltaRx / elapsed
         val (number, unit) = splitSpeed(formatSpeed(rxSpeed))
-        updateOverlay("$number $unit")
         updateNotification(number, unit, formatUsage())
       }
     }
@@ -221,98 +210,6 @@ class SpeedService : Service() {
     return IconCompat.createWithBitmap(bitmap)
   }
 
-  private fun canDraw(): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      Settings.canDrawOverlays(this)
-    } else true
-  }
-
-  private fun removeOverlay() {
-    try {
-      overlayView?.let { windowManager?.removeView(it) }
-    } catch (_: Exception) {}
-    overlayView = null
-    numberView = null
-    unitView = null
-  }
-
-  private fun getStatusBarHeight(): Int {
-    var result = 0
-    val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-    if (resourceId > 0) {
-      result = resources.getDimensionPixelSize(resourceId)
-    }
-    return result
-  }
-
-  private fun updateOverlay(speed: String) {
-    try {
-      if (!canDraw()) {
-        removeOverlay()
-        return
-      }
-
-      val parts = speed.split(" ")
-      val number = parts.getOrNull(0) ?: speed
-      val unit = parts.getOrNull(1) ?: "B/s"
-
-      if (overlayView == null) {
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val layout = LinearLayout(this).apply {
-          orientation = LinearLayout.VERTICAL
-          setBackgroundColor(Color.TRANSPARENT)
-          setPadding(4, 0, 4, 0)
-        }
-        val num = TextView(this).apply {
-          setTextColor(Color.WHITE)
-          textSize = 10f
-          setShadowLayer(2f, 0f, 0f, Color.BLACK)
-          gravity = Gravity.CENTER
-          text = number
-        }
-        val unitTv = TextView(this).apply {
-          setTextColor(Color.WHITE)
-          textSize = 7f
-          setShadowLayer(2f, 0f, 0f, Color.BLACK)
-          gravity = Gravity.CENTER
-          text = unit
-        }
-        layout.addView(num)
-        layout.addView(unitTv)
-
-        val statusBarHeight = getStatusBarHeight()
-        val params = WindowManager.LayoutParams(
-          WindowManager.LayoutParams.WRAP_CONTENT,
-          WindowManager.LayoutParams.WRAP_CONTENT,
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-          else
-            WindowManager.LayoutParams.TYPE_PHONE,
-          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-          PixelFormat.TRANSLUCENT
-        ).apply {
-          gravity = Gravity.TOP or Gravity.START
-          x = 120
-          y = (statusBarHeight / 2) - 16
-        }
-
-        windowManager?.addView(layout, params)
-        overlayView = layout
-        numberView = num
-        unitView = unitTv
-      } else {
-        numberView?.text = number
-        unitView?.text = unit
-      }
-    } catch (e: Exception) {
-      e.printStackTrace()
-      removeOverlay()
-    }
-  }
-
   private fun updateNotification(number: String, unit: String, usage: String) {
     val notif = buildNotification(number, unit, usage)
     val nm = getSystemService(NotificationManager::class.java)
@@ -358,7 +255,6 @@ class SpeedService : Service() {
     running = false
     instance = null
     handler.removeCallbacksAndMessages(null)
-    removeOverlay()
     super.onDestroy()
   }
 }
