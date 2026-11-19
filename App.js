@@ -68,7 +68,6 @@ export default function App() {
 
   const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
-  const connectionTypeRef = useRef('unknown');
   const intervalRef = useRef(null);
   const lastOverlayUpdate = useRef(0);
   const lastNotifUpdate = useRef(0);
@@ -86,10 +85,6 @@ export default function App() {
   useEffect(() => {
     dailyDataRef.current = dailyData;
   }, [dailyData]);
-
-  useEffect(() => {
-    connectionTypeRef.current = connectionType;
-  }, [connectionType]);
 
   useEffect(() => {
     (async () => {
@@ -242,8 +237,11 @@ export default function App() {
       const last = lastBytesRef.current;
 
       if (last.total > 0) {
-        const deltaTotal = Math.max(0, (total.rx + total.tx) - last.total);
-        const deltaMobile = Math.max(0, (mobile.rx + mobile.tx) - last.mobile);
+        const totalNow = total.rx + total.tx;
+        const mobileNow = mobile.rx + mobile.tx;
+
+        const deltaTotal = Math.max(0, totalNow - last.total);
+        const deltaMobile = Math.max(0, mobileNow - last.mobile);
         const deltaWifi = Math.max(0, deltaTotal - deltaMobile);
 
         if (deltaTotal > 0) {
@@ -261,15 +259,9 @@ export default function App() {
             data.unshift(todayEntry);
           }
 
-          const conn = connectionTypeRef.current;
-          if (conn === 'cellular') {
-            todayEntry.mobile += deltaMobile || deltaTotal;
-          } else if (conn === 'wifi') {
-            todayEntry.wifi += deltaWifi || deltaTotal;
-          } else {
-            todayEntry.wifi += deltaWifi;
-            todayEntry.mobile += deltaMobile;
-          }
+          // Mobile bytes always from mobile counter; everything else is WiFi
+          todayEntry.mobile += deltaMobile;
+          todayEntry.wifi += deltaWifi;
 
           if (data.length > 60) data = data.slice(0, 60);
           dailyDataRef.current = data;
