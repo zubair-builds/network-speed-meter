@@ -16,6 +16,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.drawable.IconCompat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -199,7 +200,7 @@ class SpeedService : Service() {
     return "Mobile: ${formatBytes(todayMobile)}  WiFi: ${formatBytes(todayWifi)}"
   }
 
-  private fun createSpeedIcon(number: String): Icon {
+  private fun createSpeedIcon(number: String): IconCompat {
     val size = 48
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
@@ -217,7 +218,7 @@ class SpeedService : Service() {
     val y = size / 2f - (paint.descent() + paint.ascent()) / 2f
     canvas.drawText(number, x, y, paint)
 
-    return Icon.createWithBitmap(bitmap)
+    return IconCompat.createWithBitmap(bitmap)
   }
 
   private fun canDraw(): Boolean {
