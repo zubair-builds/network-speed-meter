@@ -350,16 +350,6 @@ export default function App() {
                 </View>
               </View>
             ))}
-            <View style={styles.legend}>
-              <Text style={styles.legendLabel}>Low</Text>
-              <View style={[styles.legendBox, { backgroundColor: '#161b22' }]} />
-              <View style={[styles.legendBox, { backgroundColor: '#1f2a44' }]} />
-              <View style={[styles.legendBox, { backgroundColor: '#1e3a6e' }]} />
-              <View style={[styles.legendBox, { backgroundColor: '#1d4ed8' }]} />
-              <View style={[styles.legendBox, { backgroundColor: '#2563eb' }]} />
-              <View style={[styles.legendBox, { backgroundColor: '#3b82f6' }]} />
-              <Text style={styles.legendLabel}>High</Text>
-            </View>
           </View>
         )}
       />
@@ -438,22 +428,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryText: { color: '#fff', fontWeight: '600' },
-  legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    backgroundColor: '#121212',
-  },
-  legendBox: {
-    width: 18,
-    height: 18,
-    marginHorizontal: 3,
-    borderRadius: 3,
-  },
-  legendLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginHorizontal: 6,
-  },
 });
