@@ -23,7 +23,6 @@
       },
       "package": "com.zubair.speedmeter",
       "permissions": [
-        "SYSTEM_ALERT_WINDOW",
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_SPECIAL_USE",
