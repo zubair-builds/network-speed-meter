@@ -58,6 +58,8 @@ export default function App() {
   const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
   const intervalRef = useRef(null);
   const overlayEnabled = useRef(false);
+  const lastOverlayUpdate = useRef(0);
+  const lastNotifUpdate = useRef(0);
 
   const { downStr, upStr } = useNetworkTraffic({
     interval: 1000,
@@ -71,54 +73,65 @@ export default function App() {
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'android') return;
+      try {
+        await Notifications.setNotificationChannelAsync('speed', {
+          name: 'Network Speed',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+        await Notifications.requestPermissionsAsync();
 
-      await Notifications.setNotificationChannelAsync('speed', {
-        name: 'Network Speed',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      });
-      await Notifications.requestPermissionsAsync();
-
-      const can = await NetworkUsage.canDrawOverlay?.();
-      if (!can) {
-        Alert.alert(
-          'Status Bar Overlay',
-          'Allow "Display over other apps" so speed can appear in the status bar.',
-          [
-            { text: 'Later', style: 'cancel' },
-            {
-              text: 'Allow',
-              onPress: async () => {
-                await NetworkUsage.requestOverlayPermission?.();
+        const can = await NetworkUsage.canDrawOverlay?.();
+        if (!can) {
+          Alert.alert(
+            'Status Bar Overlay',
+            'Allow "Display over other apps" so speed can appear in the status bar.',
+            [
+              { text: 'Later', style: 'cancel' },
+              {
+                text: 'Allow',
+                onPress: async () => {
+                  try {
+                    await NetworkUsage.requestOverlayPermission?.();
+                  } catch (e) {}
+                },
               },
-            },
-          ]
-        );
-      } else {
-        overlayEnabled.current = true;
-        await updateOverlay();
+            ]
+          );
+        } else {
+          overlayEnabled.current = true;
+          updateOverlay();
+        }
+      } catch (e) {
+        console.log('Init error:', e);
       }
     })();
   }, []);
 
   useEffect(() => {
-    if (Platform.OS === 'android') {
+    if (Platform.OS !== 'android') return;
+    const now = Date.now();
+    if (now - lastOverlayUpdate.current > 1500) {
+      lastOverlayUpdate.current = now;
       updateOverlay();
+    }
+    if (now - lastNotifUpdate.current > 4000) {
+      lastNotifUpdate.current = now;
       showSpeedNotification();
     }
   }, [downloadSpeed, uploadSpeed, summary]);
 
   const updateOverlay = async () => {
     try {
-      const can = await NetworkUsage.canDrawOverlay?.();
-      if (can) {
-        const { number, unit } = splitSpeed(downloadSpeed);
-        const text = `${number}\n${unit}`;
-        await NetworkUsage.showOverlay?.(text);
-        overlayEnabled.current = true;
-      }
+      if (!NetworkUsage?.canDrawOverlay) return;
+      const can = await NetworkUsage.canDrawOverlay();
+      if (!can) return;
+      const { number, unit } = splitSpeed(downloadSpeed);
+      const text = `${number}\n${unit}`;
+      await NetworkUsage.showOverlay?.(text);
+      overlayEnabled.current = true;
     } catch (e) {
-      console.log('Overlay error:', e);
+      console.log('Overlay error:', e?.message || e);
     }
   };
 
@@ -140,7 +153,7 @@ export default function App() {
         trigger: null,
       });
     } catch (e) {
-      console.log('Notification error:', e);
+      console.log('Notification error:', e?.message || e);
     }
   };
 
