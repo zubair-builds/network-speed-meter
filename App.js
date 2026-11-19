@@ -54,10 +54,9 @@ const displayDate = (iso) => {
   });
 };
 
-const startOfDay = (d) => {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+const parseISODate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
 };
 
 export default function App() {
@@ -165,7 +164,6 @@ export default function App() {
       if (!todayEntry) {
         todayEntry = {
           date: todayISO,
-          dateObj: new Date().toISOString(),
           mobile: 0,
           wifi: 0,
         };
@@ -215,14 +213,15 @@ export default function App() {
   };
 
   const calculateSummary = (data) => {
-    const now = startOfDay(new Date());
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const last7 = { mobile: 0, wifi: 0 };
     const last30 = { mobile: 0, wifi: 0 };
     const thisMonth = { mobile: 0, wifi: 0 };
 
     data.forEach(item => {
-      const d = startOfDay(new Date(item.dateObj));
-      const diffDays = Math.round((now - d) / (1000 * 60 * 60 * 24));
+      const d = parseISODate(item.date);
+      const diffDays = Math.round((today - d) / (1000 * 60 * 60 * 24));
 
       if (diffDays >= 0 && diffDays < 7) {
         last7.mobile += item.mobile;
@@ -232,7 +231,7 @@ export default function App() {
         last30.mobile += item.mobile;
         last30.wifi += item.wifi;
       }
-      if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+      if (d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()) {
         thisMonth.mobile += item.mobile;
         thisMonth.wifi += item.wifi;
       }
