@@ -12,6 +12,15 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNetworkTraffic } from '@hoanggbao00/expo-network-traffic';
 import NetworkUsage from './modules/expo-network-usage';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 const formatBytes = (bytes) => {
   if (bytes === 0) return '0 MB';
@@ -40,6 +49,7 @@ export default function App() {
 
   const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
   const intervalRef = useRef(null);
+  const notifIdRef = useRef(null);
 
   const { downStr, upStr } = useNetworkTraffic({
     interval: 1000,
@@ -49,6 +59,49 @@ export default function App() {
 
   const downloadSpeed = downStr || '0 KB/s';
   const uploadSpeed = upStr || '0 KB/s';
+
+  // Request notification permission and create channel
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('speed', {
+          name: 'Network Speed',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+      }
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status === 'granted') {
+        await showSpeedNotification(downloadSpeed, uploadSpeed);
+      }
+    })();
+  }, []);
+
+  // Update notification when speed changes
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      showSpeedNotification(downloadSpeed, uploadSpeed);
+    }
+  }, [downloadSpeed, uploadSpeed]);
+
+  const showSpeedNotification = async (down, up) => {
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        identifier: 'speed-meter',
+        content: {
+          title: 'Network Speed',
+          body: `\u2193 ${down}   \u2191 ${up}`,
+          sticky: true,
+          autoDismiss: false,
+          priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        },
+        trigger: null,
+      });
+      notifIdRef.current = id;
+    } catch (e) {
+      console.log('Notification error:', e);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -211,8 +264,8 @@ export default function App() {
           <Text style={styles.dateSmall}>{formatDate(currentTime)}</Text>
         </View>
         <View style={styles.speedSection}>
-          <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
-          <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
+          <Text style={styles.speedLabel}>\u2193 {downloadSpeed}</Text>
+          <Text style={styles.speedLabel}>\u2191 {uploadSpeed}</Text>
           <Text style={styles.netType}>{connectionType.toUpperCase()}</Text>
         </View>
       </View>
