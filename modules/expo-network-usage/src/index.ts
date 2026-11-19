@@ -5,8 +5,8 @@ declare class ExpoNetworkUsageModule extends NativeModule {
   getMobileBytes(): Promise<{ rx: number; tx: number }>;
   canDrawOverlay(): Promise<boolean>;
   requestOverlayPermission(): Promise<boolean>;
-  showOverlay(text: string): Promise<boolean>;
-  hideOverlay(): Promise<boolean>;
+  startSpeedService(): Promise<boolean>;
+  stopSpeedService(): Promise<boolean>;
 }
 
 export default requireNativeModule<ExpoNetworkUsageModule>('ExpoNetworkUsage');
