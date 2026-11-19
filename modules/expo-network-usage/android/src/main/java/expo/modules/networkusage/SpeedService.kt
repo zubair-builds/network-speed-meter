@@ -40,9 +40,16 @@ class SpeedService : Service() {
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
+  private val MAX_DELTA_BYTES = 50L * 1024 * 1024 // 50 MB sanity cap per tick
+
+  companion object {
+    @Volatile
+    var instance: SpeedService? = null
+  }
 
   override fun onCreate() {
     super.onCreate()
+    instance = this
     loadTodayTotals()
     createNotificationChannel()
     startForeground(NOTIF_ID, buildNotification("0 B/s", formatUsage()))
@@ -54,6 +61,10 @@ class SpeedService : Service() {
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
+
+  fun getTodayTotals(): Map<String, Long> {
+    return mapOf("mobile" to todayMobile, "wifi" to todayWifi)
+  }
 
   private fun todayISO(): String {
     return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -106,7 +117,6 @@ class SpeedService : Service() {
       return
     }
 
-    // Reset totals if day changed
     val currentDate = todayISO()
     if (currentDate != todayDate) {
       todayDate = currentDate
@@ -118,10 +128,19 @@ class SpeedService : Service() {
     if (lastTime > 0) {
       val elapsed = (now - lastTime) / 1000.0
       if (elapsed > 0) {
-        val deltaRx = (rx - lastRx).coerceAtLeast(0)
-        val deltaTx = (tx - lastTx).coerceAtLeast(0)
-        val deltaMobile = ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
-        val deltaTotal = (deltaRx + deltaTx).coerceAtLeast(0)
+        var deltaRx = (rx - lastRx).coerceAtLeast(0)
+        var deltaTx = (tx - lastTx).coerceAtLeast(0)
+        var deltaMobile = ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
+        var deltaTotal = (deltaRx + deltaTx).coerceAtLeast(0)
+
+        // Sanity cap — ignore spikes from counter resets
+        if (deltaTotal > MAX_DELTA_BYTES) {
+          deltaRx = 0
+          deltaTx = 0
+          deltaMobile = 0
+          deltaTotal = 0
+        }
+
         val deltaWifi = (deltaTotal - deltaMobile).coerceAtLeast(0)
 
         todayMobile += deltaMobile
@@ -159,9 +178,27 @@ class SpeedService : Service() {
     return "Mobile: ${formatBytes(todayMobile)}  WiFi: ${formatBytes(todayWifi)}"
   }
 
+  private fun canDraw(): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      Settings.canDrawOverlays(this)
+    } else true
+  }
+
+  private fun removeOverlay() {
+    try {
+      overlayView?.let { windowManager?.removeView(it) }
+    } catch (_: Exception) {}
+    overlayView = null
+    numberView = null
+    unitView = null
+  }
+
   private fun updateOverlay(speed: String) {
     try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return
+      if (!canDraw()) {
+        removeOverlay()
+        return
+      }
 
       val parts = speed.split(" ")
       val number = parts.getOrNull(0) ?: speed
@@ -218,6 +255,7 @@ class SpeedService : Service() {
       }
     } catch (e: Exception) {
       e.printStackTrace()
+      removeOverlay()
     }
   }
 
@@ -260,11 +298,9 @@ class SpeedService : Service() {
 
   override fun onDestroy() {
     running = false
+    instance = null
     handler.removeCallbacksAndMessages(null)
-    try {
-      overlayView?.let { windowManager?.removeView(it) }
-    } catch (_: Exception) {}
-    overlayView = null
+    removeOverlay()
     super.onDestroy()
   }
 }
