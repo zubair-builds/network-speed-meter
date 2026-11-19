@@ -26,7 +26,8 @@
         "SYSTEM_ALERT_WINDOW",
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_SPECIAL_USE"
+        "FOREGROUND_SERVICE_SPECIAL_USE",
+        "RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
