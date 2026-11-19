@@ -303,7 +303,7 @@ class SpeedService : Service() {
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle("Speed: $speed")
       .setContentText(usage)
-      .setSmallIcon(android.R.drawable.stat_notify_more)
+      .setSmallIcon(R.drawable.ic_transparent)
       .setOngoing(true)
       .setContentIntent(pending)
       .setPriority(NotificationCompat.PRIORITY_MIN)
