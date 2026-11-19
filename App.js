@@ -7,6 +7,7 @@ import {
   FlatList,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,7 +50,7 @@ export default function App() {
 
   const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
   const intervalRef = useRef(null);
-  const notifIdRef = useRef(null);
+  const overlayEnabled = useRef(false);
 
   const { downStr, upStr } = useNetworkTraffic({
     interval: 1000,
@@ -60,33 +61,66 @@ export default function App() {
   const downloadSpeed = downStr || '0 KB/s';
   const uploadSpeed = upStr || '0 KB/s';
 
-  // Request notification permission and create channel
+  // Overlay + notification setup
   useEffect(() => {
     (async () => {
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('speed', {
-          name: 'Network Speed',
-          importance: Notifications.AndroidImportance.DEFAULT,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
-      }
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status === 'granted') {
-        await showSpeedNotification(downloadSpeed, uploadSpeed);
+      if (Platform.OS !== 'android') return;
+
+      // Notification channel
+      await Notifications.setNotificationChannelAsync('speed', {
+        name: 'Network Speed',
+        importance: Notifications.AndroidImportance.DEFAULT,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      await Notifications.requestPermissionsAsync();
+
+      // Overlay permission
+      const can = await NetworkUsage.canDrawOverlay?.();
+      if (!can) {
+        Alert.alert(
+          'Status Bar Overlay',
+          'Allow "Display over other apps" so speed can appear in the status bar.',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Allow',
+              onPress: async () => {
+                await NetworkUsage.requestOverlayPermission?.();
+              },
+            },
+          ]
+        );
+      } else {
+        overlayEnabled.current = true;
+        await updateOverlay();
       }
     })();
   }, []);
 
-  // Update notification when speed changes
+  // Update overlay + notification on speed change
   useEffect(() => {
     if (Platform.OS === 'android') {
+      updateOverlay();
       showSpeedNotification(downloadSpeed, uploadSpeed);
     }
   }, [downloadSpeed, uploadSpeed]);
 
+  const updateOverlay = async () => {
+    try {
+      const can = await NetworkUsage.canDrawOverlay?.();
+      if (can) {
+        const text = `\u2193${downloadSpeed} \u2191${uploadSpeed}`;
+        await NetworkUsage.showOverlay?.(text);
+        overlayEnabled.current = true;
+      }
+    } catch (e) {
+      console.log('Overlay error:', e);
+    }
+  };
+
   const showSpeedNotification = async (down, up) => {
     try {
-      const id = await Notifications.scheduleNotificationAsync({
+      await Notifications.scheduleNotificationAsync({
         identifier: 'speed-meter',
         content: {
           title: 'Network Speed',
@@ -97,7 +131,6 @@ export default function App() {
         },
         trigger: null,
       });
-      notifIdRef.current = id;
     } catch (e) {
       console.log('Notification error:', e);
     }
