@@ -7,10 +7,8 @@ import {
   FlatList,
   StatusBar,
   Platform,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
 import * as Notifications from 'expo-notifications';
@@ -73,8 +71,6 @@ const STYLES = [
 ];
 
 export default function App() {
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [connectionType, setConnectionType] = useState('unknown');
   const [dailyData, setDailyData] = useState([]);
   const [summary, setSummary] = useState({
     last7: { mobile: 0, wifi: 0 },
@@ -115,22 +111,15 @@ export default function App() {
 
   useEffect(() => {
     loadData();
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setConnectionType(state.type);
-    });
-
     intervalRef.current = setInterval(() => {
       updateSpeed();
       refreshTodayFromService();
     }, 1000);
 
     return () => {
-      unsubscribe();
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
@@ -290,17 +279,8 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
       <View style={styles.topBar}>
-        <View style={styles.clockSection}>
-          <Text style={styles.clockText}>
-            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </Text>
-          <Text style={styles.dateSmall}>{displayDate(toISODate(currentTime))}</Text>
-        </View>
-        <View style={styles.speedSection}>
-          <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
-          <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
-          <Text style={styles.netType}>{connectionType.toUpperCase()}</Text>
-        </View>
+        <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
+        <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
       </View>
 
       <TouchableOpacity style={styles.settingsToggle} onPress={() => setShowSettings(!showSettings)}>
@@ -391,18 +371,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   topBar: {
     backgroundColor: '#1a1a1a',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     alignItems: 'center',
   },
-  clockSection: { alignItems: 'flex-start' },
-  clockText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  dateSmall: { color: '#aaa', fontSize: 12 },
-  speedSection: { alignItems: 'flex-end' },
-  speedLabel: { color: '#4CAF50', fontSize: 14, fontWeight: '600' },
-  netType: { color: '#64B5F6', fontSize: 12, marginTop: 2 },
+  speedLabel: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
   settingsToggle: {
     backgroundColor: '#1e1e1e',
     paddingVertical: 10,
