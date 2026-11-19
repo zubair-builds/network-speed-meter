@@ -7,12 +7,12 @@ import {
   FlatList,
   StatusBar,
   Platform,
-  ScrollView,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNetworkTraffic } from '@hoanggbao00/expo-network-traffic';
+import NetworkUsage from './modules/expo-network-usage';
 
-// Helper to format bytes to MB/GB
 const formatBytes = (bytes) => {
   if (bytes === 0) return '0 MB';
   const mb = bytes / (1024 * 1024);
@@ -31,8 +31,6 @@ const formatDate = (date) => {
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [connectionType, setConnectionType] = useState('unknown');
-  const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
-  const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
   const [dailyData, setDailyData] = useState([]);
   const [summary, setSummary] = useState({
     last7: { mobile: 0, wifi: 0 },
@@ -40,41 +38,38 @@ export default function App() {
     thisMonth: { mobile: 0, wifi: 0 },
   });
 
-  const lastBytesRef = useRef({ total: 0, time: Date.now() });
+  const lastBytesRef = useRef({ total: 0, mobile: 0, time: Date.now() });
   const intervalRef = useRef(null);
 
-  // Load stored data
+  const { downStr, upStr } = useNetworkTraffic({
+    interval: 1000,
+    enabled: Platform.OS === 'android',
+    decimals: 1,
+  });
+
+  const downloadSpeed = downStr || '0 KB/s';
+  const uploadSpeed = upStr || '0 KB/s';
+
   useEffect(() => {
     loadData();
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Network monitoring
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setConnectionType(state.type);
     });
 
-    // Simulate / approximate speed tracking
-    // Note: For real speed, install @hoanggbao00/expo-network-traffic (Android)
-    // and replace this simulation with real values.
     intervalRef.current = setInterval(async () => {
-      // Fake speed for demo (replace with real library)
-      const down = Math.random() * 500 + 50; // KB/s
-      const up = Math.random() * 100 + 10;
-      setDownloadSpeed(`${down.toFixed(0)} KB/s`);
-      setUploadSpeed(`${up.toFixed(0)} KB/s`);
-
-      // Accumulate daily usage (approximate)
       await accumulateUsage();
-    }, 2000);
+    }, 5000);
 
     return () => {
       unsubscribe();
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [connectionType]);
 
   const loadData = async () => {
     try {
@@ -84,67 +79,69 @@ export default function App() {
         setDailyData(parsed);
         calculateSummary(parsed);
       } else {
-        // Seed with sample data similar to the screenshot
-        const sample = generateSampleData();
-        setDailyData(sample);
-        await AsyncStorage.setItem('dailyUsage', JSON.stringify(sample));
-        calculateSummary(sample);
+        setDailyData([]);
+        calculateSummary([]);
       }
     } catch (e) {
       console.log(e);
     }
   };
 
-  const generateSampleData = () => {
-    const data = [];
-    const today = new Date();
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const mobile = Math.random() * 3 + 0.3;
-      const wifi = Math.random() * 3 + 0.2;
-      data.push({
-        date: formatDate(d),
-        dateObj: d.toISOString(),
-        mobile: mobile * 1024 * 1024 * 1024, // bytes
-        wifi: wifi * 1024 * 1024 * 1024,
-      });
-    }
-    return data;
-  };
-
   const accumulateUsage = async () => {
-    // In a real app, get delta from TrafficStats / NetworkStatsManager
-    // Here we just add a small random amount based on connection type for demo
-    const now = new Date();
-    const todayStr = formatDate(now);
-    const delta = Math.random() * 50 * 1024; // small bytes
+    if (Platform.OS !== 'android') return;
+    try {
+      if (!NetworkUsage || typeof NetworkUsage.getTotalBytes !== 'function') return;
+      const total = await NetworkUsage.getTotalBytes();
+      const mobile = await NetworkUsage.getMobileBytes();
+      if (!total || !mobile) return;
 
-    let data = [...dailyData];
-    let todayEntry = data.find(d => d.date === todayStr);
+      const now = Date.now();
+      const last = lastBytesRef.current;
 
-    if (!todayEntry) {
-      todayEntry = {
-        date: todayStr,
-        dateObj: now.toISOString(),
-        mobile: 0,
-        wifi: 0,
+      if (last.total > 0) {
+        const deltaTotal = Math.max(0, (total.rx + total.tx) - last.total);
+        const deltaMobile = Math.max(0, (mobile.rx + mobile.tx) - last.mobile);
+        const deltaWifi = Math.max(0, deltaTotal - deltaMobile);
+
+        if (deltaTotal > 0) {
+          const todayStr = formatDate(new Date());
+          let data = [...dailyData];
+          let todayEntry = data.find(d => d.date === todayStr);
+
+          if (!todayEntry) {
+            todayEntry = {
+              date: todayStr,
+              dateObj: new Date().toISOString(),
+              mobile: 0,
+              wifi: 0,
+            };
+            data.unshift(todayEntry);
+          }
+
+          if (connectionType === 'cellular') {
+            todayEntry.mobile += deltaMobile || deltaTotal;
+          } else if (connectionType === 'wifi') {
+            todayEntry.wifi += deltaWifi || deltaTotal;
+          } else {
+            todayEntry.wifi += deltaWifi;
+            todayEntry.mobile += deltaMobile;
+          }
+
+          if (data.length > 60) data = data.slice(0, 60);
+          setDailyData([...data]);
+          calculateSummary(data);
+          await AsyncStorage.setItem('dailyUsage', JSON.stringify(data));
+        }
+      }
+
+      lastBytesRef.current = {
+        total: total.rx + total.tx,
+        mobile: mobile.rx + mobile.tx,
+        time: now,
       };
-      data.unshift(todayEntry);
+    } catch (e) {
+      console.log('Usage tracking error:', e.message || e);
     }
-
-    if (connectionType === 'cellular') {
-      todayEntry.mobile += delta;
-    } else if (connectionType === 'wifi') {
-      todayEntry.wifi += delta;
-    }
-
-    // Keep only last 60 days
-    if (data.length > 60) data = data.slice(0, 60);
-
-    setDailyData(data);
-    calculateSummary(data);
-    await AsyncStorage.setItem('dailyUsage', JSON.stringify(data));
   };
 
   const calculateSummary = (data) => {
@@ -156,7 +153,6 @@ export default function App() {
     data.forEach(item => {
       const d = new Date(item.dateObj);
       const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
-
       if (diffDays < 7) {
         last7.mobile += item.mobile;
         last7.wifi += item.wifi;
@@ -170,24 +166,43 @@ export default function App() {
         thisMonth.wifi += item.wifi;
       }
     });
-
     setSummary({ last7, last30, thisMonth });
+  };
+
+  const getHeatColor = (bytes) => {
+    if (!bytes || bytes <= 0) return '#0d1117';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 30) return '#161b22';
+    if (mb < 100) return '#1f2a44';
+    if (mb < 300) return '#1e3a6e';
+    if (mb < 800) return '#1d4ed8';
+    if (mb < 2000) return '#2563eb';
+    return '#3b82f6';
+  };
+
+  const getTextColor = (bytes) => {
+    const mb = bytes / (1024 * 1024);
+    return mb > 150 ? '#ffffff' : '#e5e7eb';
   };
 
   const renderRow = ({ item }) => (
     <View style={styles.row}>
       <Text style={[styles.cell, styles.dateCell]}>{item.date}</Text>
-      <Text style={styles.cell}>{formatBytes(item.mobile)}</Text>
-      <Text style={styles.cell}>{formatBytes(item.wifi)}</Text>
-      <Text style={styles.cell}>{formatBytes(item.mobile + item.wifi)}</Text>
+      <View style={[styles.heatCell, { backgroundColor: getHeatColor(item.mobile) }]}>
+        <Text style={[styles.cellText, { color: getTextColor(item.mobile) }]}>{formatBytes(item.mobile)}</Text>
+      </View>
+      <View style={[styles.heatCell, { backgroundColor: getHeatColor(item.wifi) }]}>
+        <Text style={[styles.cellText, { color: getTextColor(item.wifi) }]}>{formatBytes(item.wifi)}</Text>
+      </View>
+      <View style={[styles.heatCell, { backgroundColor: getHeatColor(item.mobile + item.wifi) }]}>
+        <Text style={[styles.cellText, { color: getTextColor(item.mobile + item.wifi) }]}>{formatBytes(item.mobile + item.wifi)}</Text>
+      </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-
-      {/* Top sticky header with clock + speed */}
       <View style={styles.topBar}>
         <View style={styles.clockSection}>
           <Text style={styles.clockText}>
@@ -201,19 +216,15 @@ export default function App() {
           <Text style={styles.netType}>{connectionType.toUpperCase()}</Text>
         </View>
       </View>
-
       <View style={styles.header}>
         <Text style={styles.title}>Internet Speed Meter</Text>
       </View>
-
-      {/* Table Header */}
       <View style={styles.tableHeader}>
         <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
         <Text style={styles.headerCell}>Mobile</Text>
         <Text style={styles.headerCell}>WiFi</Text>
         <Text style={styles.headerCell}>Total</Text>
       </View>
-
       <FlatList
         data={dailyData}
         keyExtractor={(item) => item.date}
@@ -221,29 +232,33 @@ export default function App() {
         style={styles.list}
         ListFooterComponent={() => (
           <View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>Last 7 days</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.last7.mobile)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.last7.wifi)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>
-                {formatBytes(summary.last7.mobile + summary.last7.wifi)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>Last 30 days</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.last30.mobile)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.last30.wifi)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>
-                {formatBytes(summary.last30.mobile + summary.last30.wifi)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>This Month</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.thisMonth.mobile)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>{formatBytes(summary.thisMonth.wifi)}</Text>
-              <Text style={[styles.cell, styles.summaryText]}>
-                {formatBytes(summary.thisMonth.mobile + summary.thisMonth.wifi)}
-              </Text>
+            {[
+              { label: 'Last 7 days', data: summary.last7 },
+              { label: 'Last 30 days', data: summary.last30 },
+              { label: 'This Month', data: summary.thisMonth },
+            ].map((s) => (
+              <View key={s.label} style={styles.summaryRow}>
+                <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>{s.label}</Text>
+                <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile) }]}>
+                  <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile) }]}>{formatBytes(s.data.mobile)}</Text>
+                </View>
+                <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.wifi) }]}>
+                  <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.wifi) }]}>{formatBytes(s.data.wifi)}</Text>
+                </View>
+                <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile + s.data.wifi) }]}>
+                  <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile + s.data.wifi) }]}>{formatBytes(s.data.mobile + s.data.wifi)}</Text>
+                </View>
+              </View>
+            ))}
+            <View style={styles.legend}>
+              <Text style={styles.legendLabel}>Low</Text>
+              <View style={[styles.legendBox, { backgroundColor: '#161b22' }]} />
+              <View style={[styles.legendBox, { backgroundColor: '#1f2a44' }]} />
+              <View style={[styles.legendBox, { backgroundColor: '#1e3a6e' }]} />
+              <View style={[styles.legendBox, { backgroundColor: '#1d4ed8' }]} />
+              <View style={[styles.legendBox, { backgroundColor: '#2563eb' }]} />
+              <View style={[styles.legendBox, { backgroundColor: '#3b82f6' }]} />
+              <Text style={styles.legendLabel}>High</Text>
             </View>
           </View>
         )}
@@ -253,95 +268,72 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+  container: { flex: 1, backgroundColor: '#121212' },
   topBar: {
     backgroundColor: '#1a1a1a',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  clockSection: {
-    alignItems: 'flex-start',
-  },
-  clockText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  dateSmall: {
-    color: '#aaa',
-    fontSize: 12,
-  },
-  speedSection: {
-    alignItems: 'flex-end',
-  },
-  speedLabel: {
-    color: '#4CAF50',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  netType: {
-    color: '#2196F3',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  header: {
-    backgroundColor: '#2196F3',
-    padding: 12,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
+  clockSection: { alignItems: 'flex-start' },
+  clockText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  dateSmall: { color: '#aaa', fontSize: 12 },
+  speedSection: { alignItems: 'flex-end' },
+  speedLabel: { color: '#4CAF50', fontSize: 14, fontWeight: '600' },
+  netType: { color: '#64B5F6', fontSize: 12, marginTop: 2 },
+  header: { backgroundColor: '#1a1a1a', padding: 14 },
+  title: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#1976D2',
-    paddingVertical: 10,
+    backgroundColor: '#1e1e1e',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
-  headerCell: {
-    flex: 1,
-    color: '#fff',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  dateCell: {
-    flex: 1.4,
-    textAlign: 'left',
-    paddingLeft: 8,
-  },
+  headerCell: { flex: 1, color: '#aaa', fontWeight: '600', textAlign: 'center', fontSize: 13 },
+  dateCell: { flex: 1.5, textAlign: 'left', paddingLeft: 12, color: '#ddd' },
   row: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: '#121212',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 12,
+    borderBottomColor: '#222',
+    alignItems: 'center',
   },
-  cell: {
+  heatCell: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-    color: '#333',
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  list: {
-    flex: 1,
-  },
+  cellText: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
+  list: { flex: 1 },
   summaryRow: {
     flexDirection: 'row',
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#1a1a1a',
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#bbdefb',
+    borderTopColor: '#333',
+    alignItems: 'center',
   },
-  summaryText: {
-    fontWeight: 'bold',
-    color: '#1565C0',
+  summaryText: { color: '#fff', fontWeight: '600' },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: '#121212',
+  },
+  legendBox: {
+    width: 18,
+    height: 18,
+    marginHorizontal: 3,
+    borderRadius: 3,
+  },
+  legendLabel: {
+    color: '#888',
+    fontSize: 12,
+    marginHorizontal: 6,
   },
 });
