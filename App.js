@@ -79,7 +79,7 @@ export default function App() {
   const intervalRef = useRef(null);
   const lastOverlayUpdate = useRef(0);
   const lastNotifUpdate = useRef(0);
-  const notifId = useRef(null);
+  const lastSaveTime = useRef(0);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -153,21 +153,18 @@ export default function App() {
       const mobileToday = today?.mobile || 0;
       const wifiToday = today?.wifi || 0;
 
-      // Only schedule once, then just update content if possible
-      if (!notifId.current) {
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Speed: ${downloadSpeed}`,
-            body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
-            sticky: true,
-            autoDismiss: false,
-            priority: Notifications.AndroidNotificationPriority.MIN,
-            sound: null,
-          },
-          trigger: null,
-        });
-        notifId.current = id;
-      }
+      await Notifications.scheduleNotificationAsync({
+        identifier: 'speed-meter',
+        content: {
+          title: `Speed: ${downloadSpeed}`,
+          body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
+          sticky: true,
+          autoDismiss: false,
+          priority: Notifications.AndroidNotificationPriority.MIN,
+          sound: null,
+        },
+        trigger: { channelId: 'speed' },
+      });
     } catch (e) {
       console.log('Notification error:', e?.message || e);
     }
@@ -180,7 +177,7 @@ export default function App() {
       lastOverlayUpdate.current = now;
       updateOverlay();
     }
-    if (now - lastNotifUpdate.current > 10000) {
+    if (now - lastNotifUpdate.current > 8000) {
       lastNotifUpdate.current = now;
       updateNotification();
     }
@@ -197,7 +194,6 @@ export default function App() {
       setConnectionType(state.type);
     });
 
-    // Speed + usage every 1 second
     intervalRef.current = setInterval(() => {
       updateSpeedAndUsage();
     }, 1000);
@@ -238,6 +234,14 @@ export default function App() {
       const last = lastBytesRef.current;
       const elapsed = (now - last.time) / 1000;
 
+      // Update baseline immediately to avoid double-counting
+      lastBytesRef.current = {
+        totalRx: total.rx,
+        totalTx: total.tx,
+        mobile: mobile.rx + mobile.tx,
+        time: now,
+      };
+
       if (elapsed > 0 && last.totalRx > 0) {
         const deltaRx = Math.max(0, total.rx - last.totalRx);
         const deltaTx = Math.max(0, total.tx - last.totalTx);
@@ -247,7 +251,6 @@ export default function App() {
         setDownloadSpeed(formatSpeed(rxSpeed));
         setUploadSpeed(formatSpeed(txSpeed));
 
-        // Accumulate daily usage
         const totalNow = total.rx + total.tx;
         const mobileNow = mobile.rx + mobile.tx;
         const deltaTotal = Math.max(0, totalNow - (last.totalRx + last.totalTx));
@@ -276,16 +279,14 @@ export default function App() {
           dailyDataRef.current = data;
           setDailyData([...data]);
           calculateSummary(data);
-          await AsyncStorage.setItem('dailyUsage', JSON.stringify(data));
+
+          // Save every ~10 seconds instead of every second
+          if (now - lastSaveTime.current > 10000) {
+            lastSaveTime.current = now;
+            AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
+          }
         }
       }
-
-      lastBytesRef.current = {
-        totalRx: total.rx,
-        totalTx: total.tx,
-        mobile: mobile.rx + mobile.tx,
-        time: now,
-      };
     } catch (e) {
       console.log('Speed/usage error:', e.message || e);
     }
