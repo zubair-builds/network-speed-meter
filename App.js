@@ -66,10 +66,9 @@ export default function App() {
   const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
 
-  const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, mobile: 0, time: Date.now() });
+  const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
   const intervalRef = useRef(null);
-  const lastSaveTime = useRef(0);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -100,17 +99,11 @@ export default function App() {
           );
         }
 
-        // Start foreground service for background speed + overlay + notification
         await NetworkUsage.startSpeedService?.();
       } catch (e) {
         console.log('Init error:', e);
       }
     })();
-
-    return () => {
-      // Optionally stop service when app is fully closed
-      // NetworkUsage.stopSpeedService?.().catch(() => {});
-    };
   }, []);
 
   useEffect(() => {
@@ -125,7 +118,8 @@ export default function App() {
     });
 
     intervalRef.current = setInterval(() => {
-      updateSpeedAndUsage();
+      updateSpeed();
+      refreshTodayFromService();
     }, 1000);
 
     return () => {
@@ -152,16 +146,46 @@ export default function App() {
     }
   };
 
-  const updateSpeedAndUsage = async () => {
+  const refreshTodayFromService = async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const totals = await NetworkUsage.getTodayTotals?.();
+      if (!totals) return;
+
+      const todayISO = toISODate(new Date());
+      let data = [...dailyDataRef.current];
+      let todayEntry = data.find(d => d.date === todayISO);
+
+      if (!todayEntry) {
+        todayEntry = {
+          date: todayISO,
+          dateObj: new Date().toISOString(),
+          mobile: 0,
+          wifi: 0,
+        };
+        data.unshift(todayEntry);
+      }
+
+      todayEntry.mobile = totals.mobile || 0;
+      todayEntry.wifi = totals.wifi || 0;
+
+      dailyDataRef.current = data;
+      setDailyData([...data]);
+      calculateSummary(data);
+
+      // Persist occasionally
+      AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
+    } catch (e) {
+      // service may not be ready yet
+    }
+  };
+
+  const updateSpeed = async () => {
     if (Platform.OS !== 'android') return;
     try {
       if (!NetworkUsage || typeof NetworkUsage.getTotalBytes !== 'function') return;
       const total = await NetworkUsage.getTotalBytes();
-      const mobile = await NetworkUsage.getMobileBytes();
-      if (!total || !mobile) return;
-
-      // Handle unsupported devices
-      if (total.rx < 0 || total.tx < 0) {
+      if (!total || total.rx < 0) {
         setDownloadSpeed('Unsupported');
         return;
       }
@@ -173,56 +197,17 @@ export default function App() {
       lastBytesRef.current = {
         totalRx: total.rx,
         totalTx: total.tx,
-        mobile: mobile.rx + mobile.tx,
         time: now,
       };
 
       if (elapsed > 0 && last.totalRx > 0) {
         const deltaRx = Math.max(0, total.rx - last.totalRx);
         const deltaTx = Math.max(0, total.tx - last.totalTx);
-        const rxSpeed = deltaRx / elapsed;
-        const txSpeed = deltaTx / elapsed;
-
-        setDownloadSpeed(formatSpeed(rxSpeed));
-        setUploadSpeed(formatSpeed(txSpeed));
-
-        const totalNow = total.rx + total.tx;
-        const mobileNow = mobile.rx + mobile.tx;
-        const deltaTotal = Math.max(0, totalNow - (last.totalRx + last.totalTx));
-        const deltaMobile = Math.max(0, mobileNow - last.mobile);
-        const deltaWifi = Math.max(0, deltaTotal - deltaMobile);
-
-        if (deltaTotal > 0) {
-          const todayISO = toISODate(new Date());
-          let data = [...dailyDataRef.current];
-          let todayEntry = data.find(d => d.date === todayISO);
-
-          if (!todayEntry) {
-            todayEntry = {
-              date: todayISO,
-              dateObj: new Date().toISOString(),
-              mobile: 0,
-              wifi: 0,
-            };
-            data.unshift(todayEntry);
-          }
-
-          todayEntry.mobile += deltaMobile;
-          todayEntry.wifi += deltaWifi;
-
-          if (data.length > 60) data = data.slice(0, 60);
-          dailyDataRef.current = data;
-          setDailyData([...data]);
-          calculateSummary(data);
-
-          if (now - lastSaveTime.current > 10000) {
-            lastSaveTime.current = now;
-            AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
-          }
-        }
+        setDownloadSpeed(formatSpeed(deltaRx / elapsed));
+        setUploadSpeed(formatSpeed(deltaTx / elapsed));
       }
     } catch (e) {
-      console.log('Speed/usage error:', e.message || e);
+      console.log('Speed error:', e.message || e);
     }
   };
 
