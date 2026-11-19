@@ -28,6 +28,9 @@ class SpeedService : Service() {
   private var todayWifi = 0L
   private var todayDate = ""
 
+  private var iconSize = 48
+  private var iconStyle = "normal" // normal, bold, compact
+
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
@@ -41,6 +44,7 @@ class SpeedService : Service() {
   override fun onCreate() {
     super.onCreate()
     instance = this
+    loadSettings()
     loadTodayTotals()
     createNotificationChannel()
     val notification = buildNotification("0", "B/s", formatUsage())
@@ -60,6 +64,33 @@ class SpeedService : Service() {
 
   fun getTodayTotals(): Map<String, Long> {
     return mapOf("mobile" to todayMobile, "wifi" to todayWifi)
+  }
+
+  fun setIconSize(size: Int) {
+    iconSize = size.coerceIn(32, 72)
+    saveSettings()
+  }
+
+  fun setIconStyle(style: String) {
+    iconStyle = style
+    saveSettings()
+  }
+
+  fun getIconSettings(): Map<String, Any> {
+    return mapOf("size" to iconSize, "style" to iconStyle)
+  }
+
+  private fun loadSettings() {
+    val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    iconSize = prefs.getInt("icon_size", 48)
+    iconStyle = prefs.getString("icon_style", "normal") ?: "normal"
+  }
+
+  private fun saveSettings() {
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+      .putInt("icon_size", iconSize)
+      .putString("icon_style", iconStyle)
+      .apply()
   }
 
   private fun todayISO(): String {
@@ -190,17 +221,24 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String): IconCompat {
-    val size = 48
+    val size = iconSize
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
+    val baseTextSize = when (iconStyle) {
+      "compact" -> size * 0.35f
+      "bold" -> size * 0.5f
+      else -> size * 0.42f
+    }
+    val textSize = if (number.length > 3) baseTextSize * 0.75f else baseTextSize
+
     val paint = Paint().apply {
       color = Color.WHITE
-      textSize = if (number.length > 3) 14f else 18f
+      this.textSize = textSize
       isAntiAlias = true
       textAlign = Paint.Align.CENTER
-      typeface = Typeface.DEFAULT_BOLD
+      typeface = if (iconStyle == "bold") Typeface.DEFAULT_BOLD else Typeface.DEFAULT
     }
 
     val x = size / 2f
