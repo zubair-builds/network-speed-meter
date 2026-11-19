@@ -28,8 +28,8 @@ class SpeedService : Service() {
   private var todayWifi = 0L
   private var todayDate = ""
 
-  private var iconSize = 48
-  private var iconStyle = "normal"
+  private var iconSize = 80
+  private var iconStyle = "bold"
 
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
@@ -67,7 +67,7 @@ class SpeedService : Service() {
   }
 
   fun setIconSize(size: Int) {
-    iconSize = size.coerceIn(32, 72)
+    iconSize = size.coerceIn(64, 160)
     saveSettings()
   }
 
@@ -82,8 +82,8 @@ class SpeedService : Service() {
 
   private fun loadSettings() {
     val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    iconSize = prefs.getInt("icon_size", 48)
-    iconStyle = prefs.getString("icon_style", "normal") ?: "normal"
+    iconSize = prefs.getInt("icon_size", 80)
+    iconStyle = prefs.getString("icon_style", "bold") ?: "bold"
   }
 
   private fun saveSettings() {
@@ -201,7 +201,7 @@ class SpeedService : Service() {
   private fun formatSpeed(bytesPerSec: Double): String {
     if (bytesPerSec < 1024) return "${bytesPerSec.toInt()} B/s"
     if (bytesPerSec < 1024 * 1024) return String.format("%.1f KB/s", bytesPerSec / 1024)
-    return String.format("%.2f MB/s", bytesPerSec / (1024 * 1024))
+    return String.format("%.1f MB/s", bytesPerSec / (1024 * 1024))
   }
 
   private fun splitSpeed(speed: String): Pair<String, String> {
@@ -220,30 +220,41 @@ class SpeedService : Service() {
     return "Mobile: ${formatBytes(todayMobile)}  WiFi: ${formatBytes(todayWifi)}"
   }
 
-  private fun createSpeedIcon(number: String): IconCompat {
+  private fun createSpeedIcon(number: String, unit: String): IconCompat {
     val size = iconSize
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val baseTextSize = when (iconStyle) {
-      "compact" -> size * 0.35f
-      "bold" -> size * 0.5f
+    val numTextSize = when (iconStyle) {
+      "compact" -> size * 0.38f
+      "bold" -> size * 0.48f
       else -> size * 0.42f
     }
-    val textSize = if (number.length > 3) baseTextSize * 0.75f else baseTextSize
+    val unitTextSize = numTextSize * 0.45f
 
-    val paint = Paint().apply {
+    val numPaint = Paint().apply {
       color = Color.WHITE
-      this.textSize = textSize
+      textSize = numTextSize
       isAntiAlias = true
       textAlign = Paint.Align.CENTER
-      typeface = if (iconStyle == "bold") Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+      typeface = Typeface.DEFAULT_BOLD
+    }
+
+    val unitPaint = Paint().apply {
+      color = Color.WHITE
+      textSize = unitTextSize
+      isAntiAlias = true
+      textAlign = Paint.Align.CENTER
+      typeface = Typeface.DEFAULT
     }
 
     val x = size / 2f
-    val y = size / 2f - (paint.descent() + paint.ascent()) / 2f
-    canvas.drawText(number, x, y, paint)
+    val numY = size * 0.42f
+    val unitY = size * 0.72f
+
+    canvas.drawText(number, x, numY, numPaint)
+    canvas.drawText(unit, x, unitY, unitPaint)
 
     return IconCompat.createWithBitmap(bitmap)
   }
@@ -261,7 +272,7 @@ class SpeedService : Service() {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val icon = createSpeedIcon(number)
+    val icon = createSpeedIcon(number, unit)
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle("Speed: $number $unit")
