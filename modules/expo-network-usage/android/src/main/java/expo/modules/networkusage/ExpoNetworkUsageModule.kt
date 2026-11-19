@@ -8,13 +8,16 @@ import android.os.Build
 import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 
 class ExpoNetworkUsageModule : Module() {
-  private var overlayView: TextView? = null
+  private var overlayView: LinearLayout? = null
+  private var numberView: TextView? = null
+  private var unitView: TextView? = null
   private var windowManager: WindowManager? = null
 
   override fun definition() = ModuleDefinition {
@@ -69,15 +72,34 @@ class ExpoNetworkUsageModule : Module() {
         return@AsyncFunction
       }
       try {
+        val parts = text.split("\n")
+        val number = parts.getOrNull(0) ?: text
+        val unit = parts.getOrNull(1) ?: ""
+
         if (overlayView == null) {
           windowManager = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-          val tv = TextView(ctx)
-          tv.setTextColor(Color.WHITE)
-          tv.setBackgroundColor(Color.TRANSPARENT)
-          tv.setPadding(4, 2, 4, 2)
-          tv.textSize = 11f
-          tv.setShadowLayer(1.5f, 0f, 0f, Color.BLACK)
-          tv.text = text
+
+          val layout = LinearLayout(ctx)
+          layout.orientation = LinearLayout.VERTICAL
+          layout.setBackgroundColor(Color.TRANSPARENT)
+          layout.setPadding(2, 0, 2, 0)
+
+          val num = TextView(ctx)
+          num.setTextColor(Color.WHITE)
+          num.textSize = 11f
+          num.setShadowLayer(1.2f, 0f, 0f, Color.BLACK)
+          num.gravity = Gravity.CENTER
+          num.text = number
+
+          val unitTv = TextView(ctx)
+          unitTv.setTextColor(Color.WHITE)
+          unitTv.textSize = 8f
+          unitTv.setShadowLayer(1.2f, 0f, 0f, Color.BLACK)
+          unitTv.gravity = Gravity.CENTER
+          unitTv.text = unit
+
+          layout.addView(num)
+          layout.addView(unitTv)
 
           val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -91,13 +113,16 @@ class ExpoNetworkUsageModule : Module() {
             PixelFormat.TRANSLUCENT
           )
           params.gravity = Gravity.TOP or Gravity.START
-          params.x = 90
-          params.y = 2
+          params.x = 88
+          params.y = 1
 
-          windowManager?.addView(tv, params)
-          overlayView = tv
+          windowManager?.addView(layout, params)
+          overlayView = layout
+          numberView = num
+          unitView = unitTv
         } else {
-          overlayView?.text = text
+          numberView?.text = number
+          unitView?.text = unit
         }
         promise.resolve(true)
       } catch (e: Exception) {
@@ -109,6 +134,8 @@ class ExpoNetworkUsageModule : Module() {
       try {
         overlayView?.let { windowManager?.removeView(it) }
         overlayView = null
+        numberView = null
+        unitView = null
         promise.resolve(true)
       } catch (e: Exception) {
         promise.resolve(false)
