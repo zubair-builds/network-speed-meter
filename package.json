@@ -11,7 +11,6 @@
     "export:android": "expo export --platform android"
   },
   "dependencies": {
-    "@hoanggbao00/expo-network-traffic": "^0.1.2",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-community/netinfo": "11.4.1",
     "expo": "~52.0.0",
