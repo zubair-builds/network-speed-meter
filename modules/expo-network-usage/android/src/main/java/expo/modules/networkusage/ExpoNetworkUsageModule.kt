@@ -1,5 +1,6 @@
 package expo.modules.networkusage
 
+import android.content.Context
 import android.content.Intent
 import android.net.TrafficStats
 import android.os.Build
@@ -7,6 +8,8 @@ import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
+import java.text.SimpleDateFormat
+import java.util.*
 
 class ExpoNetworkUsageModule : Module() {
 
@@ -30,7 +33,23 @@ class ExpoNetworkUsageModule : Module() {
       if (svc != null) {
         promise.resolve(svc.getTodayTotals())
       } else {
-        promise.resolve(mapOf("mobile" to 0L, "wifi" to 0L))
+        // Fallback to SharedPreferences so we don't overwrite with zeros
+        val ctx = appContext.reactContext
+        if (ctx != null) {
+          val prefs = ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
+          val storedDate = prefs.getString("date", "") ?: ""
+          val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+          if (storedDate == today) {
+            promise.resolve(mapOf(
+              "mobile" to prefs.getLong("mobile", 0L),
+              "wifi" to prefs.getLong("wifi", 0L)
+            ))
+          } else {
+            promise.resolve(mapOf("mobile" to 0L, "wifi" to 0L))
+          }
+        } else {
+          promise.resolve(mapOf("mobile" to 0L, "wifi" to 0L))
+        }
       }
     }
 
