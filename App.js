@@ -105,7 +105,7 @@ export default function App() {
     try {
       const can = await NetworkUsage.canDrawOverlay?.();
       if (can) {
-        const text = `\u2193${downloadSpeed} \u2191${uploadSpeed}`;
+        const text = downloadSpeed;
         await NetworkUsage.showOverlay?.(text);
         overlayEnabled.current = true;
       }
