@@ -26,7 +26,7 @@ Notifications.setNotificationHandler({
 const formatBytes = (bytes) => {
   if (bytes === 0) return '0 MB';
   const mb = bytes / (1024 * 1024);
-  if (mb < 1024) return `${mb.toFixed(2)} MB`;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
   return `${(mb / 1024).toFixed(2)} GB`;
 };
 
@@ -61,12 +61,10 @@ export default function App() {
   const downloadSpeed = downStr || '0 KB/s';
   const uploadSpeed = upStr || '0 KB/s';
 
-  // Overlay + notification setup
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'android') return;
 
-      // Notification channel
       await Notifications.setNotificationChannelAsync('speed', {
         name: 'Network Speed',
         importance: Notifications.AndroidImportance.DEFAULT,
@@ -74,7 +72,6 @@ export default function App() {
       });
       await Notifications.requestPermissionsAsync();
 
-      // Overlay permission
       const can = await NetworkUsage.canDrawOverlay?.();
       if (!can) {
         Alert.alert(
@@ -97,13 +94,12 @@ export default function App() {
     })();
   }, []);
 
-  // Update overlay + notification on speed change
   useEffect(() => {
     if (Platform.OS === 'android') {
       updateOverlay();
-      showSpeedNotification(downloadSpeed, uploadSpeed);
+      showSpeedNotification();
     }
-  }, [downloadSpeed, uploadSpeed]);
+  }, [downloadSpeed, uploadSpeed, summary]);
 
   const updateOverlay = async () => {
     try {
@@ -118,13 +114,17 @@ export default function App() {
     }
   };
 
-  const showSpeedNotification = async (down, up) => {
+  const showSpeedNotification = async () => {
     try {
+      const today = dailyData.find(d => d.date === formatDate(new Date()));
+      const mobileToday = today?.mobile || 0;
+      const wifiToday = today?.wifi || 0;
+
       await Notifications.scheduleNotificationAsync({
         identifier: 'speed-meter',
         content: {
-          title: 'Network Speed',
-          body: `\u2193 ${down}   \u2191 ${up}`,
+          title: `Speed: ${downloadSpeed}`,
+          body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
           sticky: true,
           autoDismiss: false,
           priority: Notifications.AndroidNotificationPriority.DEFAULT,
