@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -8,7 +8,6 @@ import {
   StatusBar,
   Platform,
   Alert,
-  AppState,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,13 +54,6 @@ const displayDate = (iso) => {
   });
 };
 
-const splitSpeed = (speedStr) => {
-  if (!speedStr) return { number: '0', unit: 'B/s' };
-  const match = speedStr.match(/^([\d.]+)\s*(.*)$/);
-  if (match) return { number: match[1], unit: match[2] || 'B/s' };
-  return { number: speedStr, unit: '' };
-};
-
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [connectionType, setConnectionType] = useState('unknown');
@@ -77,8 +69,6 @@ export default function App() {
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, mobile: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
   const intervalRef = useRef(null);
-  const lastOverlayUpdate = useRef(0);
-  const lastNotifUpdate = useRef(0);
   const lastSaveTime = useRef(0);
 
   useEffect(() => {
@@ -89,13 +79,6 @@ export default function App() {
     (async () => {
       if (Platform.OS !== 'android') return;
       try {
-        await Notifications.setNotificationChannelAsync('speed', {
-          name: 'Network Speed',
-          importance: Notifications.AndroidImportance.LOW,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          sound: null,
-          vibrationPattern: null,
-        });
         await Notifications.requestPermissionsAsync();
 
         const can = await NetworkUsage.canDrawOverlay?.();
@@ -116,72 +99,19 @@ export default function App() {
             ]
           );
         }
+
+        // Start foreground service for background speed + overlay + notification
+        await NetworkUsage.startSpeedService?.();
       } catch (e) {
         console.log('Init error:', e);
       }
     })();
 
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') {
-        NetworkUsage.hideOverlay?.().catch(() => {});
-      }
-    });
-
     return () => {
-      sub.remove();
-      NetworkUsage.hideOverlay?.().catch(() => {});
+      // Optionally stop service when app is fully closed
+      // NetworkUsage.stopSpeedService?.().catch(() => {});
     };
   }, []);
-
-  const updateOverlay = useCallback(async () => {
-    try {
-      if (!NetworkUsage?.canDrawOverlay) return;
-      const can = await NetworkUsage.canDrawOverlay();
-      if (!can) return;
-      const { number, unit } = splitSpeed(downloadSpeed);
-      const text = `${number}\n${unit}`;
-      await NetworkUsage.showOverlay?.(text);
-    } catch (e) {
-      console.log('Overlay error:', e?.message || e);
-    }
-  }, [downloadSpeed]);
-
-  const updateNotification = useCallback(async () => {
-    try {
-      const todayISO = toISODate(new Date());
-      const today = dailyDataRef.current.find(d => d.date === todayISO);
-      const mobileToday = today?.mobile || 0;
-      const wifiToday = today?.wifi || 0;
-
-      await Notifications.scheduleNotificationAsync({
-        identifier: 'speed-meter',
-        content: {
-          title: `Speed: ${downloadSpeed}`,
-          body: `Mobile: ${formatBytes(mobileToday)}   WiFi: ${formatBytes(wifiToday)}`,
-          sticky: true,
-          autoDismiss: false,
-          priority: Notifications.AndroidNotificationPriority.MIN,
-          sound: null,
-        },
-        trigger: { channelId: 'speed' },
-      });
-    } catch (e) {
-      console.log('Notification error:', e?.message || e);
-    }
-  }, [downloadSpeed]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const now = Date.now();
-    if (now - lastOverlayUpdate.current > 2000) {
-      lastOverlayUpdate.current = now;
-      updateOverlay();
-    }
-    if (now - lastNotifUpdate.current > 8000) {
-      lastNotifUpdate.current = now;
-      updateNotification();
-    }
-  }, [downloadSpeed, uploadSpeed, summary, updateOverlay, updateNotification]);
 
   useEffect(() => {
     loadData();
@@ -230,11 +160,16 @@ export default function App() {
       const mobile = await NetworkUsage.getMobileBytes();
       if (!total || !mobile) return;
 
+      // Handle unsupported devices
+      if (total.rx < 0 || total.tx < 0) {
+        setDownloadSpeed('Unsupported');
+        return;
+      }
+
       const now = Date.now();
       const last = lastBytesRef.current;
       const elapsed = (now - last.time) / 1000;
 
-      // Update baseline immediately to avoid double-counting
       lastBytesRef.current = {
         totalRx: total.rx,
         totalTx: total.tx,
@@ -280,7 +215,6 @@ export default function App() {
           setDailyData([...data]);
           calculateSummary(data);
 
-          // Save every ~10 seconds instead of every second
           if (now - lastSaveTime.current > 10000) {
             lastSaveTime.current = now;
             AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
