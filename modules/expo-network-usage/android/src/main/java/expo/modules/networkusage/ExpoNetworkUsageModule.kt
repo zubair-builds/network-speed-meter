@@ -73,9 +73,10 @@ class ExpoNetworkUsageModule : Module() {
           windowManager = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
           val tv = TextView(ctx)
           tv.setTextColor(Color.WHITE)
-          tv.setBackgroundColor(Color.parseColor("#CC000000"))
-          tv.setPadding(16, 8, 16, 8)
-          tv.textSize = 12f
+          tv.setBackgroundColor(Color.TRANSPARENT)
+          tv.setPadding(4, 2, 4, 2)
+          tv.textSize = 11f
+          tv.setShadowLayer(1.5f, 0f, 0f, Color.BLACK)
           tv.text = text
 
           val params = WindowManager.LayoutParams(
@@ -89,9 +90,9 @@ class ExpoNetworkUsageModule : Module() {
               WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
           )
-          params.gravity = Gravity.TOP or Gravity.END
-          params.x = 8
-          params.y = 4
+          params.gravity = Gravity.TOP or Gravity.START
+          params.x = 90
+          params.y = 2
 
           windowManager?.addView(tv, params)
           overlayView = tv
