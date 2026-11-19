@@ -11,4 +11,5 @@ npm-debug.*
 web-build/
 /android/
 /ios/
+modules/*/android/build/
 .DS_Store
