@@ -33,7 +33,6 @@ class ExpoNetworkUsageModule : Module() {
       if (svc != null) {
         promise.resolve(svc.getTodayTotals())
       } else {
-        // Fallback to SharedPreferences so we don't overwrite with zeros
         val ctx = appContext.reactContext
         if (ctx != null) {
           val prefs = ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
@@ -51,6 +50,34 @@ class ExpoNetworkUsageModule : Module() {
           promise.resolve(mapOf("mobile" to 0L, "wifi" to 0L))
         }
       }
+    }
+
+    AsyncFunction("getIconSettings") { promise: Promise ->
+      val svc = SpeedService.instance
+      if (svc != null) {
+        promise.resolve(svc.getIconSettings())
+      } else {
+        val ctx = appContext.reactContext
+        if (ctx != null) {
+          val prefs = ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
+          promise.resolve(mapOf(
+            "size" to prefs.getInt("icon_size", 48),
+            "style" to (prefs.getString("icon_style", "normal") ?: "normal")
+          ))
+        } else {
+          promise.resolve(mapOf("size" to 48, "style" to "normal"))
+        }
+      }
+    }
+
+    AsyncFunction("setIconSize") { size: Int, promise: Promise ->
+      SpeedService.instance?.setIconSize(size)
+      promise.resolve(true)
+    }
+
+    AsyncFunction("setIconStyle") { style: String, promise: Promise ->
+      SpeedService.instance?.setIconStyle(style)
+      promise.resolve(true)
     }
 
     AsyncFunction("canDrawOverlay") { promise: Promise ->
