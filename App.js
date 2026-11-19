@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
   TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
@@ -32,7 +33,7 @@ const formatSpeed = (bytesPerSec) => {
   if (!bytesPerSec || bytesPerSec < 0) return '0 B/s';
   if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
   if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-  return `${(bytesPerSec / (1024 * 1024)).toFixed(2)} MB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
 };
 
 const toISODate = (date) => {
@@ -58,12 +59,6 @@ const parseISODate = (iso) => {
   return new Date(y, m - 1, d);
 };
 
-const SIZES = [
-  { label: 'S', value: 36 },
-  { label: 'M', value: 48 },
-  { label: 'L', value: 60 },
-];
-
 const STYLES = [
   { label: 'Normal', value: 'normal' },
   { label: 'Bold', value: 'bold' },
@@ -79,8 +74,9 @@ export default function App() {
   });
   const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
-  const [iconSize, setIconSize] = useState(48);
-  const [iconStyle, setIconStyle] = useState('normal');
+  const [iconSize, setIconSize] = useState(80);
+  const [sizeInput, setSizeInput] = useState('80');
+  const [iconStyle, setIconStyle] = useState('bold');
   const [showSettings, setShowSettings] = useState(false);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
@@ -100,8 +96,10 @@ export default function App() {
 
         const settings = await NetworkUsage.getIconSettings?.();
         if (settings) {
-          setIconSize(settings.size || 48);
-          setIconStyle(settings.style || 'normal');
+          const s = settings.size || 80;
+          setIconSize(s);
+          setSizeInput(String(s));
+          setIconStyle(settings.style || 'bold');
         }
       } catch (e) {
         console.log('Init error:', e);
@@ -230,10 +228,14 @@ export default function App() {
     setSummary({ last7, last30, thisMonth });
   };
 
-  const changeSize = async (size) => {
-    setIconSize(size);
+  const applySize = async (raw) => {
+    const n = parseInt(raw, 10);
+    if (isNaN(n)) return;
+    const clamped = Math.max(64, Math.min(160, n));
+    setIconSize(clamped);
+    setSizeInput(String(clamped));
     try {
-      await NetworkUsage.setIconSize?.(size);
+      await NetworkUsage.setIconSize?.(clamped);
     } catch (e) {}
   };
 
@@ -289,18 +291,25 @@ export default function App() {
 
       {showSettings && (
         <View style={styles.settingsPanel}>
-          <Text style={styles.settingsLabel}>Icon Size</Text>
-          <View style={styles.optionRow}>
-            {SIZES.map(s => (
-              <TouchableOpacity
-                key={s.value}
-                style={[styles.optionBtn, iconSize === s.value && styles.optionBtnActive]}
-                onPress={() => changeSize(s.value)}
-              >
-                <Text style={[styles.optionText, iconSize === s.value && styles.optionTextActive]}>{s.label}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={styles.settingsLabel}>Icon Size (64–160)</Text>
+          <View style={styles.sizeRow}>
+            <TouchableOpacity style={styles.sizeBtn} onPress={() => applySize(iconSize - 4)}>
+              <Text style={styles.sizeBtnText}>−</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.sizeInput}
+              value={sizeInput}
+              onChangeText={setSizeInput}
+              onBlur={() => applySize(sizeInput)}
+              keyboardType="number-pad"
+              maxLength={3}
+            />
+            <TouchableOpacity style={styles.sizeBtn} onPress={() => applySize(iconSize + 4)}>
+              <Text style={styles.sizeBtnText}>+</Text>
+            </TouchableOpacity>
           </View>
+          <Text style={styles.sizeHint}>Current: {iconSize}px</Text>
+
           <Text style={styles.settingsLabel}>Style</Text>
           <View style={styles.optionRow}>
             {STYLES.map(s => (
@@ -382,6 +391,32 @@ const styles = StyleSheet.create({
     borderBottomColor: '#333',
   },
   settingsLabel: { color: '#aaa', fontSize: 12, marginBottom: 8, marginTop: 8 },
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  sizeBtn: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sizeBtnText: { color: '#fff', fontSize: 24, fontWeight: '600' },
+  sizeInput: {
+    width: 80,
+    height: 48,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  sizeHint: { color: '#666', fontSize: 12, textAlign: 'center', marginTop: 6 },
   optionRow: { flexDirection: 'row', gap: 8 },
   optionBtn: {
     flex: 1,
