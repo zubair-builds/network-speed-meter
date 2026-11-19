@@ -4,8 +4,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.Color
-import android.graphics.PixelFormat
+import android.graphics.*
 import android.net.TrafficStats
 import android.os.Build
 import android.os.Handler
@@ -53,7 +52,7 @@ class SpeedService : Service() {
     instance = this
     loadTodayTotals()
     createNotificationChannel()
-    val notification = buildNotification("0 B/s", formatUsage())
+    val notification = buildNotification("0", "B/s", formatUsage())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
     } else {
@@ -119,7 +118,7 @@ class SpeedService : Service() {
     var mTx = TrafficStats.getMobileTxBytes()
 
     if (rx < 0 || tx < 0) {
-      updateNotification("Unsupported", "TrafficStats not available")
+      updateNotification("--", "", "TrafficStats not available")
       return
     }
 
@@ -165,9 +164,9 @@ class SpeedService : Service() {
         if (deltaTotal > 0) saveTodayTotals()
 
         val rxSpeed = deltaRx / elapsed
-        val speedStr = formatSpeed(rxSpeed)
-        updateOverlay(speedStr)
-        updateNotification(speedStr, formatUsage())
+        val (number, unit) = splitSpeed(formatSpeed(rxSpeed))
+        updateOverlay("$number $unit")
+        updateNotification(number, unit, formatUsage())
       }
     }
 
@@ -184,6 +183,11 @@ class SpeedService : Service() {
     return String.format("%.2f MB/s", bytesPerSec / (1024 * 1024))
   }
 
+  private fun splitSpeed(speed: String): Pair<String, String> {
+    val parts = speed.split(" ")
+    return Pair(parts.getOrNull(0) ?: speed, parts.getOrNull(1) ?: "B/s")
+  }
+
   private fun formatBytes(bytes: Long): String {
     if (bytes <= 0) return "0 MB"
     val mb = bytes / (1024.0 * 1024.0)
@@ -193,6 +197,27 @@ class SpeedService : Service() {
 
   private fun formatUsage(): String {
     return "Mobile: ${formatBytes(todayMobile)}  WiFi: ${formatBytes(todayWifi)}"
+  }
+
+  private fun createSpeedIcon(number: String): Icon {
+    val size = 48
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    canvas.drawColor(Color.TRANSPARENT)
+
+    val paint = Paint().apply {
+      color = Color.WHITE
+      textSize = if (number.length > 3) 14f else 18f
+      isAntiAlias = true
+      textAlign = Paint.Align.CENTER
+      typeface = Typeface.DEFAULT_BOLD
+    }
+
+    val x = size / 2f
+    val y = size / 2f - (paint.descent() + paint.ascent()) / 2f
+    canvas.drawText(number, x, y, paint)
+
+    return Icon.createWithBitmap(bitmap)
   }
 
   private fun canDraw(): Boolean {
@@ -287,23 +312,25 @@ class SpeedService : Service() {
     }
   }
 
-  private fun updateNotification(speed: String, usage: String) {
-    val notif = buildNotification(speed, usage)
+  private fun updateNotification(number: String, unit: String, usage: String) {
+    val notif = buildNotification(number, unit, usage)
     val nm = getSystemService(NotificationManager::class.java)
     nm.notify(NOTIF_ID, notif)
   }
 
-  private fun buildNotification(speed: String, usage: String): Notification {
+  private fun buildNotification(number: String, unit: String, usage: String): Notification {
     val intent = packageManager.getLaunchIntentForPackage(packageName)
     val pending = PendingIntent.getActivity(
       this, 0, intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    val icon = createSpeedIcon(number)
+
     return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle("Speed: $speed")
+      .setContentTitle("Speed: $number $unit")
       .setContentText(usage)
-      .setSmallIcon(R.drawable.ic_transparent)
+      .setSmallIcon(icon)
       .setOngoing(true)
       .setContentIntent(pending)
       .setPriority(NotificationCompat.PRIORITY_MIN)
