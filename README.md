@@ -19,40 +19,29 @@ Real-time network speed and daily data usage tracker for Android.
 
 ## Current Status
 - Speed in status bar overlay: implemented via foreground service
-- Notification updates with speed: implemented
-- Today's totals in notification: **not yet** (service does not track daily usage)
-- Daily totals while app is backgrounded: **not yet** (still tracked only in JS)
-
-## Recommended Next Steps (to finish Phase 1)
-1. Move daily Mobile/WiFi accumulation into the Kotlin `SpeedService` (or share state with it).
-2. Put today's totals in the notification body: `Mobile: X MB  WiFi: Y MB`.
-3. Persist daily totals from the service so they survive process death.
-4. Add a simple on-device check before every build (see below).
+- Notification updates with speed + today's totals: implemented (service tracks and persists daily usage)
+- Daily totals continue in background: implemented in service
+- Unit tests for speed formatting and delta math: `__tests__/speed.test.js`
 
 ## Verification Before Build
 
-Before creating any APK, run these checks on a real device:
-
 ```bash
+npm test
 git pull
 npm install
 npx expo prebuild --clean
 npx expo run:android
 ```
 
-Then:
+Then on device:
 1. Grant overlay permission.
-2. Open the app → confirm speed appears in the top bar and status bar.
-3. Start a download (or open fast.com / YouTube).
+2. Open the app → confirm speed in top bar and status bar.
+3. Start a download.
 4. Switch to another app → speed in status bar and notification should keep updating.
-5. Pull down notification shade → confirm speed is live.
+5. Pull down notification shade → confirm speed + today's Mobile/WiFi totals.
 6. Return to the app → today's totals should have increased.
 
-If any of the above fails, do not build the APK.
-
-## Optional: Lightweight Test
-
-A simple unit test for the speed formatting and delta math can live in `__tests__/` (Jest). Native TrafficStats behavior still needs a device check.
+If any check fails, do not build the APK.
 
 ## Setup & Build
 
