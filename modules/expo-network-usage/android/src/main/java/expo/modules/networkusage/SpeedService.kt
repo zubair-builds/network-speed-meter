@@ -197,15 +197,17 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
-    val size = 128
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    // Wider than tall so 3-digit numbers stay large (matches other app ~18x16 look)
+    val width = 160
+    val height = 128
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val inset = 2f
-    val maxW = size - inset * 2
-    val maxH = size - inset * 2
-    val gap = 8f
+    val inset = 1f
+    val maxW = width - inset * 2
+    val maxH = height - inset * 2
+    val gap = 4f
 
     val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
@@ -223,17 +225,17 @@ class SpeedService : Service() {
       typeface = condensedBold
     }
 
-    var numSize = 78f
-    var unitSize = 54f
+    var numSize = 102f
+    var unitSize = 68f
 
     numPaint.textSize = numSize
-    while (textBounds(numPaint, number).width() > maxW && numSize > 28f) {
+    while (textBounds(numPaint, number).width() > maxW && numSize > 36f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
     unitPaint.textSize = unitSize
-    while (textBounds(unitPaint, unit).width() > maxW && unitSize > 20f) {
+    while (textBounds(unitPaint, unit).width() > maxW && unitSize > 24f) {
       unitSize -= 1f
       unitPaint.textSize = unitSize
     }
@@ -242,9 +244,9 @@ class SpeedService : Service() {
     var unitBounds = textBounds(unitPaint, unit)
     var totalH = numBounds.height() + gap + unitBounds.height()
 
-    while (totalH > maxH && numSize > 28f) {
+    while (totalH > maxH && numSize > 36f) {
       numSize -= 2f
-      unitSize = (unitSize * 0.96f).coerceAtLeast(20f)
+      unitSize = (unitSize * 0.97f).coerceAtLeast(24f)
       numPaint.textSize = numSize
       unitPaint.textSize = unitSize
       numBounds = textBounds(numPaint, number)
@@ -252,11 +254,11 @@ class SpeedService : Service() {
       totalH = numBounds.height() + gap + unitBounds.height()
     }
 
-    val top = (size - totalH) / 2f
+    val top = (height - totalH) / 2f
     val numBaseline = top - numBounds.top
     val unitBaseline = top + numBounds.height() + gap - unitBounds.top
 
-    val x = size / 2f
+    val x = width / 2f
     canvas.drawText(number, x, numBaseline, numPaint)
     canvas.drawText(unit, x, unitBaseline, unitPaint)
 
