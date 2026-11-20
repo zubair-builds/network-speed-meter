@@ -11,6 +11,7 @@ import android.net.TrafficStats
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import android.telephony.TelephonyManager
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
@@ -109,18 +110,29 @@ class ExpoNetworkUsageModule : Module() {
         val pm = ctx.packageManager
         val now = System.currentTimeMillis()
 
+        // Query from start of today so more apps appear
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val from = cal.timeInMillis
+
+        val subscriberId = getSubscriberId(ctx)
+
         val uidBytes = mutableMapOf<Int, Long>()
         var tetherBytes = 0L
 
-        fun queryAndAdd(networkType: Int) {
+        fun queryAndAdd(networkType: Int, subId: String?) {
           var stats: NetworkStats? = null
           try {
-            stats = nsm.querySummary(networkType, null, sessionStart, now)
+            stats = nsm.querySummary(networkType, subId, from, now)
             val bucket = NetworkStats.Bucket()
             while (stats.hasNextBucket()) {
               stats.getNextBucket(bucket)
               val uid = bucket.uid
               val bytes = bucket.rxBytes + bucket.txBytes
+              if (bytes <= 0) continue
               if (uid < 10000 || uid == Process.SYSTEM_UID || uid == 0) {
                 tetherBytes += bytes
               } else {
@@ -134,36 +146,49 @@ class ExpoNetworkUsageModule : Module() {
           }
         }
 
-        queryAndAdd(ConnectivityManager.TYPE_MOBILE)
-        queryAndAdd(ConnectivityManager.TYPE_WIFI)
+        // Mobile: try with subscriber id, then null
+        queryAndAdd(ConnectivityManager.TYPE_MOBILE, subscriberId)
+        if (subscriberId != null) {
+          queryAndAdd(ConnectivityManager.TYPE_MOBILE, null)
+        }
+        queryAndAdd(ConnectivityManager.TYPE_WIFI, null)
 
-        // Extra pass for older tether type if present
         try {
           val dun = ConnectivityManager::class.java.getField("TYPE_MOBILE_DUN").getInt(null)
-          queryAndAdd(dun)
+          queryAndAdd(dun, subscriberId)
         } catch (e: Exception) {
-          // TYPE_MOBILE_DUN not available
+          // not available
         }
 
         val result = mutableListOf<Map<String, Any>>()
         for ((uid, bytes) in uidBytes) {
-          if (bytes < 1024) continue
+          if (bytes < 512) continue
           val pkgs = pm.getPackagesForUid(uid) ?: continue
-          val packageName = pkgs.firstOrNull() ?: continue
-          val label = try {
-            val info = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(info).toString()
-          } catch (e: Exception) {
-            packageName
+          // Prefer a package that has a real app label
+          var chosen = pkgs.first()
+          var label = chosen
+          for (pkg in pkgs) {
+            try {
+              val info = pm.getApplicationInfo(pkg, 0)
+              val appLabel = pm.getApplicationLabel(info).toString()
+              if (appLabel.isNotBlank() && !appLabel.equals(pkg, ignoreCase = true)) {
+                chosen = pkg
+                label = appLabel
+                break
+              }
+              label = appLabel
+            } catch (e: Exception) {
+              // keep default
+            }
           }
           result.add(mapOf(
-            "packageName" to packageName,
+            "packageName" to chosen,
             "label" to label,
             "bytes" to bytes
           ))
         }
 
-        if (tetherBytes >= 1024) {
+        if (tetherBytes >= 512) {
           result.add(mapOf(
             "packageName" to "hotspot",
             "label" to "Hotspot",
@@ -172,7 +197,7 @@ class ExpoNetworkUsageModule : Module() {
         }
 
         result.sortByDescending { it["bytes"] as Long }
-        promise.resolve(result.take(40))
+        promise.resolve(result.take(80))
       } catch (e: Exception) {
         e.printStackTrace()
         promise.resolve(emptyList<Map<String, Any>>())
@@ -209,6 +234,20 @@ class ExpoNetworkUsageModule : Module() {
       } catch (e: Exception) {
         promise.resolve(false)
       }
+    }
+  }
+
+  private fun getSubscriberId(ctx: Context): String? {
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        null
+      } else {
+        val tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        @Suppress("DEPRECATION")
+        tm.subscriberId
+      }
+    } catch (e: Exception) {
+      null
     }
   }
 
