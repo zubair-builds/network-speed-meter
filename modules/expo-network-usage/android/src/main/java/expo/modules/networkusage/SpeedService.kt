@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
 
 class SpeedService : Service() {
   private val handler = Handler(Looper.getMainLooper())
@@ -43,7 +44,7 @@ class SpeedService : Service() {
     instance = this
     loadTodayTotals()
     createNotificationChannel()
-    val notification = buildNotification("0", "B/s", formatUsage())
+    val notification = buildNotification("0", "B", formatUsage())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
     } else {
@@ -168,13 +169,11 @@ class SpeedService : Service() {
   }
 
   private fun formatSpeed(bytesPerSec: Double): String {
-    if (bytesPerSec < 1024) return "${bytesPerSec.toInt()} B/s"
+    if (bytesPerSec < 1024) return "${bytesPerSec.roundToInt()} B/s"
     if (bytesPerSec < 1024 * 1024) {
-      val kb = bytesPerSec / 1024
-      return if (kb < 10) String.format("%.1f KB/s", kb) else String.format("%.0f KB/s", kb)
+      return "${(bytesPerSec / 1024).roundToInt()} KB/s"
     }
-    val mb = bytesPerSec / (1024 * 1024)
-    return if (mb < 10) String.format("%.1f MB/s", mb) else String.format("%.0f MB/s", mb)
+    return "${(bytesPerSec / (1024 * 1024)).roundToInt()} MB/s"
   }
 
   private fun splitSpeed(speed: String): Pair<String, String> {
