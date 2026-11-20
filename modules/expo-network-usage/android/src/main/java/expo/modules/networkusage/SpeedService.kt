@@ -28,9 +28,6 @@ class SpeedService : Service() {
   private var todayWifi = 0L
   private var todayDate = ""
 
-  private var iconSize = 80
-  private var iconStyle = "bold"
-
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
@@ -44,7 +41,6 @@ class SpeedService : Service() {
   override fun onCreate() {
     super.onCreate()
     instance = this
-    loadSettings()
     loadTodayTotals()
     createNotificationChannel()
     val notification = buildNotification("0", "B/s", formatUsage())
@@ -64,33 +60,6 @@ class SpeedService : Service() {
 
   fun getTodayTotals(): Map<String, Long> {
     return mapOf("mobile" to todayMobile, "wifi" to todayWifi)
-  }
-
-  fun setIconSize(size: Int) {
-    iconSize = size.coerceIn(64, 160)
-    saveSettings()
-  }
-
-  fun setIconStyle(style: String) {
-    iconStyle = style
-    saveSettings()
-  }
-
-  fun getIconSettings(): Map<String, Any> {
-    return mapOf("size" to iconSize, "style" to iconStyle)
-  }
-
-  private fun loadSettings() {
-    val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    iconSize = prefs.getInt("icon_size", 80)
-    iconStyle = prefs.getString("icon_style", "bold") ?: "bold"
-  }
-
-  private fun saveSettings() {
-    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-      .putInt("icon_size", iconSize)
-      .putString("icon_style", iconStyle)
-      .apply()
   }
 
   private fun todayISO(): String {
@@ -200,13 +169,20 @@ class SpeedService : Service() {
 
   private fun formatSpeed(bytesPerSec: Double): String {
     if (bytesPerSec < 1024) return "${bytesPerSec.toInt()} B/s"
-    if (bytesPerSec < 1024 * 1024) return String.format("%.1f KB/s", bytesPerSec / 1024)
-    return String.format("%.1f MB/s", bytesPerSec / (1024 * 1024))
+    if (bytesPerSec < 1024 * 1024) {
+      val kb = bytesPerSec / 1024
+      return if (kb < 10) String.format("%.1f KB/s", kb) else String.format("%.0f KB/s", kb)
+    }
+    val mb = bytesPerSec / (1024 * 1024)
+    return if (mb < 10) String.format("%.1f MB/s", mb) else String.format("%.0f MB/s", mb)
   }
 
   private fun splitSpeed(speed: String): Pair<String, String> {
     val parts = speed.split(" ")
-    return Pair(parts.getOrNull(0) ?: speed, parts.getOrNull(1) ?: "B/s")
+    val num = parts.getOrNull(0) ?: speed
+    var unit = parts.getOrNull(1) ?: "B/s"
+    unit = unit.replace("/s", "")
+    return Pair(num, unit)
   }
 
   private fun formatBytes(bytes: Long): String {
@@ -221,37 +197,34 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
-    val size = iconSize
+    val size = 48
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val numTextSize = when (iconStyle) {
-      "compact" -> size * 0.38f
-      "bold" -> size * 0.48f
-      else -> size * 0.42f
-    }
-    val unitTextSize = numTextSize * 0.45f
+    val numSize = if (number.length > 3) 20f else 26f
+    val unitSize = 12f
 
     val numPaint = Paint().apply {
       color = Color.WHITE
-      textSize = numTextSize
+      textSize = numSize
       isAntiAlias = true
+      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
       typeface = Typeface.DEFAULT_BOLD
     }
 
     val unitPaint = Paint().apply {
       color = Color.WHITE
-      textSize = unitTextSize
+      textSize = unitSize
       isAntiAlias = true
       textAlign = Paint.Align.CENTER
       typeface = Typeface.DEFAULT
     }
 
     val x = size / 2f
-    val numY = size * 0.42f
-    val unitY = size * 0.72f
+    val numY = 20f
+    val unitY = 38f
 
     canvas.drawText(number, x, numY, numPaint)
     canvas.drawText(unit, x, unitY, unitPaint)
@@ -275,7 +248,7 @@ class SpeedService : Service() {
     val icon = createSpeedIcon(number, unit)
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle("Speed: $number $unit")
+      .setContentTitle("Speed: $number $unit/s")
       .setContentText(usage)
       .setSmallIcon(icon)
       .setOngoing(true)
