@@ -158,8 +158,10 @@ export default function App() {
   const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
   const [speedHistory, setSpeedHistory] = useState([]);
-  const [dayMax, setDayMax] = useState(0);
-  const [dayAvg, setDayAvg] = useState(0);
+  const [dayMaxMobile, setDayMaxMobile] = useState(0);
+  const [dayAvgMobile, setDayAvgMobile] = useState(0);
+  const [dayMaxWifi, setDayMaxWifi] = useState(0);
+  const [dayAvgWifi, setDayAvgWifi] = useState(0);
   const [sampleInterval, setSampleInterval] = useState(30000);
 
   const [apps, setApps] = useState([]);
@@ -173,9 +175,11 @@ export default function App() {
   const intervalRef = useRef(null);
   const historyRef = useRef([]);
   const appTick = useRef(0);
-  const daySamplesRef = useRef([]);
+  const mobileSamplesRef = useRef([]);
+  const wifiSamplesRef = useRef([]);
   const lastSampleTime = useRef(0);
   const sampleIntervalRef = useRef(30000);
+  const lastMobileRef = useRef({ rx: 0, tx: 0 });
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -282,36 +286,42 @@ export default function App() {
   const loadDaySamples = async () => {
     try {
       const today = toISODate(new Date());
-      const raw = await AsyncStorage.getItem(`speedSamples_${today}`);
-      if (raw) {
-        const samples = JSON.parse(raw);
-        daySamplesRef.current = Array.isArray(samples) ? samples : [];
-        updateDayStats();
-      }
+      const [mRaw, wRaw] = await Promise.all([
+        AsyncStorage.getItem(`speedSamples_mobile_${today}`),
+        AsyncStorage.getItem(`speedSamples_wifi_${today}`),
+      ]);
+      mobileSamplesRef.current = mRaw ? JSON.parse(mRaw) : [];
+      wifiSamplesRef.current = wRaw ? JSON.parse(wRaw) : [];
+      updateDayStats();
     } catch (e) {}
   };
 
-  const updateDayStats = () => {
-    const samples = daySamplesRef.current;
-    if (!samples.length) {
-      setDayMax(0);
-      setDayAvg(0);
-      return;
-    }
+  const statsOf = (samples) => {
+    if (!samples || !samples.length) return { max: 0, avg: 0 };
     const max = Math.max(...samples);
     const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
-    setDayMax(max);
-    setDayAvg(avg);
+    return { max, avg };
   };
 
-  const saveDaySample = async (bps) => {
+  const updateDayStats = () => {
+    const m = statsOf(mobileSamplesRef.current);
+    const w = statsOf(wifiSamplesRef.current);
+    setDayMaxMobile(m.max);
+    setDayAvgMobile(m.avg);
+    setDayMaxWifi(w.max);
+    setDayAvgWifi(w.avg);
+  };
+
+  const saveDaySample = async (bps, kind) => {
     const today = toISODate(new Date());
-    daySamplesRef.current.push(bps);
-    if (daySamplesRef.current.length > 8640) {
-      daySamplesRef.current = daySamplesRef.current.slice(-8640);
+    const ref = kind === 'mobile' ? mobileSamplesRef : wifiSamplesRef;
+    const key = kind === 'mobile' ? `speedSamples_mobile_${today}` : `speedSamples_wifi_${today}`;
+    ref.current.push(bps);
+    if (ref.current.length > 8640) {
+      ref.current = ref.current.slice(-8640);
     }
     updateDayStats();
-    AsyncStorage.setItem(`speedSamples_${today}`, JSON.stringify(daySamplesRef.current)).catch(() => {});
+    AsyncStorage.setItem(key, JSON.stringify(ref.current)).catch(() => {});
   };
 
   const changeInterval = async (ms) => {
@@ -355,6 +365,10 @@ export default function App() {
         setDownloadSpeed('Unsupported');
         return;
       }
+      let mobile = null;
+      try {
+        mobile = await NetworkUsage.getMobileBytes?.();
+      } catch (e) {}
 
       const now = Date.now();
       const last = lastBytesRef.current;
@@ -378,9 +392,18 @@ export default function App() {
         historyRef.current = hist;
         setSpeedHistory([...hist]);
 
+        let isMobile = false;
+        if (mobile && mobile.rx >= 0) {
+          const prevM = lastMobileRef.current;
+          const dMobile = Math.max(0, (mobile.rx - prevM.rx) + (mobile.tx - prevM.tx));
+          const dTotal = deltaRx + deltaTx;
+          isMobile = dTotal > 0 && dMobile >= dTotal * 0.5;
+          lastMobileRef.current = { rx: mobile.rx, tx: mobile.tx };
+        }
+
         if (now - lastSampleTime.current >= sampleIntervalRef.current) {
           lastSampleTime.current = now;
-          saveDaySample(rxBps);
+          saveDaySample(rxBps, isMobile ? 'mobile' : 'wifi');
         }
       }
     } catch (e) {
@@ -536,8 +559,16 @@ export default function App() {
           <SpeedGraph data={speedHistory} />
 
           <View style={styles.dayStats}>
-            <Text style={styles.dayStatText}>Today max  {formatSpeed(dayMax)}</Text>
-            <Text style={styles.dayStatText}>Today avg  {formatSpeed(dayAvg)}</Text>
+            <View style={styles.dayStatCol}>
+              <Text style={styles.dayStatLabel}>Mobile</Text>
+              <Text style={styles.dayStatText}>Max  {formatSpeed(dayMaxMobile)}</Text>
+              <Text style={styles.dayStatText}>Avg  {formatSpeed(dayAvgMobile)}</Text>
+            </View>
+            <View style={styles.dayStatCol}>
+              <Text style={styles.dayStatLabel}>WiFi</Text>
+              <Text style={styles.dayStatText}>Max  {formatSpeed(dayMaxWifi)}</Text>
+              <Text style={styles.dayStatText}>Avg  {formatSpeed(dayAvgWifi)}</Text>
+            </View>
           </View>
 
           <View style={styles.intervalRow}>
@@ -705,6 +736,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     paddingVertical: 12,
   },
+  dayStatCol: { alignItems: 'center' },
+  dayStatLabel: { color: '#fff', fontSize: 13, fontWeight: '600', marginBottom: 4 },
   dayStatText: { color: '#aaa', fontSize: 13 },
 
   intervalRow: {
