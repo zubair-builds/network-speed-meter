@@ -26,7 +26,7 @@ Notifications.setNotificationHandler({
 });
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRAPH_HEIGHT = 140;
+const GRAPH_HEIGHT = 220;
 const GRAPH_WIDTH = SCREEN_WIDTH - 32;
 
 const INTERVALS = [
@@ -148,7 +148,7 @@ function SpeedGraph({ data }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('speed');
+  const [tab, setTab] = useState('table');
   const [dailyData, setDailyData] = useState([]);
   const [summary, setSummary] = useState({
     last7: { mobile: 0, wifi: 0 },
@@ -475,7 +475,46 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
 
-      {tab === 'speed' ? (
+      {tab === 'table' && (
+        <>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
+            <Text style={styles.headerCell}>Mobile</Text>
+            <Text style={styles.headerCell}>WiFi</Text>
+            <Text style={styles.headerCell}>Total</Text>
+          </View>
+          <FlatList
+            data={dailyData}
+            keyExtractor={(item) => item.date}
+            renderItem={renderRow}
+            style={styles.list}
+            ListFooterComponent={() => (
+              <View>
+                {[
+                  { label: 'Last 7 days', data: summary.last7 },
+                  { label: 'Last 30 days', data: summary.last30 },
+                  { label: 'This Month', data: summary.thisMonth },
+                ].map((s) => (
+                  <View key={s.label} style={styles.summaryRow}>
+                    <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>{s.label}</Text>
+                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile) }]}>
+                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile) }]}>{formatBytes(s.data.mobile)}</Text>
+                    </View>
+                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.wifi) }]}>
+                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.wifi) }]}>{formatBytes(s.data.wifi)}</Text>
+                    </View>
+                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile + s.data.wifi) }]}>
+                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile + s.data.wifi) }]}>{formatBytes(s.data.mobile + s.data.wifi)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          />
+        </>
+      )}
+
+      {tab === 'chart' && (
         <>
           <View style={styles.sessionBar}>
             <View style={styles.sessionItem}>
@@ -524,43 +563,10 @@ export default function App() {
               <Text style={styles.sampleBtnText}>Clear</Text>
             </Pressable>
           </View>
-
-          <View style={styles.tableHeader}>
-            <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
-            <Text style={styles.headerCell}>Mobile</Text>
-            <Text style={styles.headerCell}>WiFi</Text>
-            <Text style={styles.headerCell}>Total</Text>
-          </View>
-          <FlatList
-            data={dailyData}
-            keyExtractor={(item) => item.date}
-            renderItem={renderRow}
-            style={styles.list}
-            ListFooterComponent={() => (
-              <View>
-                {[
-                  { label: 'Last 7 days', data: summary.last7 },
-                  { label: 'Last 30 days', data: summary.last30 },
-                  { label: 'This Month', data: summary.thisMonth },
-                ].map((s) => (
-                  <View key={s.label} style={styles.summaryRow}>
-                    <Text style={[styles.cell, styles.dateCell, styles.summaryText]}>{s.label}</Text>
-                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile) }]}>
-                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile) }]}>{formatBytes(s.data.mobile)}</Text>
-                    </View>
-                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.wifi) }]}>
-                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.wifi) }]}>{formatBytes(s.data.wifi)}</Text>
-                    </View>
-                    <View style={[styles.heatCell, { backgroundColor: getHeatColor(s.data.mobile + s.data.wifi) }]}>
-                      <Text style={[styles.cellText, styles.summaryText, { color: getTextColor(s.data.mobile + s.data.wifi) }]}>{formatBytes(s.data.mobile + s.data.wifi)}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          />
         </>
-      ) : (
+      )}
+
+      {tab === 'apps' && (
         <>
           <View style={styles.sessionBar}>
             <View style={styles.sessionItem}>
@@ -601,10 +607,16 @@ export default function App() {
 
       <View style={styles.tabBar}>
         <Pressable
-          style={[styles.tab, tab === 'speed' && styles.tabActive]}
-          onPress={() => setTab('speed')}
+          style={[styles.tab, tab === 'table' && styles.tabActive]}
+          onPress={() => setTab('table')}
         >
-          <Text style={[styles.tabText, tab === 'speed' && styles.tabTextActive]}>Speed</Text>
+          <Text style={[styles.tabText, tab === 'table' && styles.tabTextActive]}>Table</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, tab === 'chart' && styles.tabActive]}
+          onPress={() => setTab('chart')}
+        >
+          <Text style={[styles.tabText, tab === 'chart' && styles.tabTextActive]}>Chart</Text>
         </Pressable>
         <Pressable
           style={[styles.tab, tab === 'apps' && styles.tabActive]}
@@ -675,7 +687,7 @@ const styles = StyleSheet.create({
 
   graphWrap: {
     backgroundColor: '#1a1a1a',
-    paddingVertical: 8,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
@@ -691,7 +703,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: '#1a1a1a',
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   dayStatText: { color: '#aaa', fontSize: 13 },
 
@@ -700,7 +712,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a1a1a',
-    paddingBottom: 6,
+    paddingBottom: 8,
     gap: 8,
   },
   intervalLabel: { color: '#666', fontSize: 12, marginRight: 4 },
@@ -722,7 +734,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     backgroundColor: '#1a1a1a',
-    paddingBottom: 10,
+    paddingBottom: 16,
     gap: 12,
   },
   sampleBtn: {
