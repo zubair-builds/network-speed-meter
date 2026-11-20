@@ -31,7 +31,7 @@ const formatSpeed = (bytesPerSec) => {
   if (!bytesPerSec || bytesPerSec < 0) return '0 B/s';
   if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
   if (bytesPerSec < 1024 * 1024) return `${Math.round(bytesPerSec / 1024)} KB/s`;
-  return `${Math.round(bytesPerSec / (1024 * 1024))} MB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
 };
 
 const toISODate = (date) => {
