@@ -44,7 +44,7 @@ class SpeedService : Service() {
     instance = this
     loadTodayTotals()
     createNotificationChannel()
-    val notification = buildNotification("0", "B", formatUsage())
+    val notification = buildNotification("0", "B/s", formatUsage())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
     } else {
@@ -170,11 +170,11 @@ class SpeedService : Service() {
 
   private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
     return when {
-      bytesPerSec < 1024 -> Pair("${bytesPerSec.roundToInt()}", "B")
-      bytesPerSec < 1024 * 1024 -> Pair("${(bytesPerSec / 1024).roundToInt()}", "K")
+      bytesPerSec < 1024 -> Pair("${bytesPerSec.roundToInt()}", "B/s")
+      bytesPerSec < 1024 * 1024 -> Pair("${(bytesPerSec / 1024).roundToInt()}", "KB/s")
       else -> {
         val mb = bytesPerSec / (1024.0 * 1024.0)
-        Pair(String.format("%.1f", mb), "M")
+        Pair(String.format("%.1f", mb), "MB/s")
       }
     }
   }
@@ -215,23 +215,27 @@ class SpeedService : Service() {
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    var numSize = 72f
+    var numSize = 64f
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 24f) {
+    while (numPaint.measureText(number) > maxWidth && numSize > 22f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    val unitSize = 36f
+    var unitSize = 28f
     unitPaint.textSize = unitSize
+    while (unitPaint.measureText(unit) > maxWidth && unitSize > 14f) {
+      unitSize -= 1f
+      unitPaint.textSize = unitSize
+    }
 
     val numFm = numPaint.fontMetrics
     val unitFm = unitPaint.fontMetrics
     val numHeight = numFm.descent - numFm.ascent
     val unitHeight = unitFm.descent - unitFm.ascent
-    val gap = 0f
+    val gap = 1f
     val totalHeight = numHeight + gap + unitHeight
-    val startY = (size - totalHeight) / 2f - 2f
+    val startY = (size - totalHeight) / 2f - 1f
 
     val numBaseline = startY - numFm.ascent
     val unitBaseline = startY + numHeight + gap - unitFm.ascent
@@ -257,14 +261,9 @@ class SpeedService : Service() {
     )
 
     val icon = createSpeedIcon(number, unit)
-    val unitFull = when (unit) {
-      "K" -> "KB/s"
-      "M" -> "MB/s"
-      else -> "B/s"
-    }
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle("Speed: $number $unitFull")
+      .setContentTitle("Speed: $number $unit")
       .setContentText(usage)
       .setSmallIcon(icon)
       .setOngoing(true)
