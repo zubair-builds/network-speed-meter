@@ -28,8 +28,8 @@ const formatBytes = (bytes) => {
 };
 
 const formatSpeed = (bytesPerSec) => {
-  if (!bytesPerSec || bytesPerSec < 0) return '0 B/s';
-  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+  if (!bytesPerSec || bytesPerSec < 0) return '0 KB/s';
+  if (bytesPerSec < 1024) return '0 KB/s';
   if (bytesPerSec < 1024 * 1024) return `${Math.round(bytesPerSec / 1024)} KB/s`;
   return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
 };
@@ -64,8 +64,8 @@ export default function App() {
     last30: { mobile: 0, wifi: 0 },
     thisMonth: { mobile: 0, wifi: 0 },
   });
-  const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
-  const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
+  const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
+  const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
