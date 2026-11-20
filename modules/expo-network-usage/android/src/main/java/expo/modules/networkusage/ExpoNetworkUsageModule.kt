@@ -1,12 +1,16 @@
 package expo.modules.networkusage
 
 import android.app.AppOpsManager
+import android.app.usage.NetworkStats
+import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.TrafficStats
 import android.os.Build
+import android.os.RemoteException
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -18,7 +22,8 @@ class ExpoNetworkUsageModule : Module() {
 
   companion object {
     private var sessionStart = 0L
-    private val uidBaseline = mutableMapOf<Int, Long>()
+    private var cachedApps: List<ApplicationInfo>? = null
+    private var lastAppsLoad = 0L
   }
 
   override fun definition() = ModuleDefinition {
@@ -82,8 +87,6 @@ class ExpoNetworkUsageModule : Module() {
 
     AsyncFunction("startSession") { promise: Promise ->
       sessionStart = System.currentTimeMillis()
-      uidBaseline.clear()
-      snapshotBaselines()
       promise.resolve(sessionStart)
     }
 
@@ -97,49 +100,66 @@ class ExpoNetworkUsageModule : Module() {
           promise.resolve(emptyList<Map<String, Any>>())
           return@AsyncFunction
         }
+        if (!checkUsageAccess()) {
+          promise.resolve(emptyList<Map<String, Any>>())
+          return@AsyncFunction
+        }
         if (sessionStart == 0L) {
           sessionStart = System.currentTimeMillis()
-          snapshotBaselines()
         }
 
+        val nsm = ctx.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
         val pm = ctx.packageManager
-        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        val uidToApps = mutableMapOf<Int, MutableList<ApplicationInfo>>()
+        val now = System.currentTimeMillis()
 
+        val apps = getCachedApps(pm)
+        val uidToLabel = mutableMapOf<Int, Pair<String, String>>()
         for (app in apps) {
-          val list = uidToApps.getOrPut(app.uid) { mutableListOf() }
-          list.add(app)
+          if (app.uid < 10000) continue
+          if (!uidToLabel.containsKey(app.uid)) {
+            val label = try { pm.getApplicationLabel(app).toString() } catch (e: Exception) { app.packageName }
+            uidToLabel[app.uid] = app.packageName to label
+          }
         }
 
         val result = mutableListOf<Map<String, Any>>()
 
-        for ((uid, appList) in uidToApps) {
-          val currentRx = TrafficStats.getUidRxBytes(uid)
-          val currentTx = TrafficStats.getUidTxBytes(uid)
-          if (currentRx < 0 || currentTx < 0) continue
-
-          val current = currentRx + currentTx
-          val baseline = uidBaseline[uid] ?: current
-          val delta = (current - baseline).coerceAtLeast(0)
-
-          if (delta < 1024) continue
-
-          val mainApp = appList.firstOrNull { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 } ?: appList.first()
-          val label = try {
-            pm.getApplicationLabel(mainApp).toString()
-          } catch (e: Exception) {
-            mainApp.packageName
+        fun queryAndAdd(networkType: Int) {
+          var stats: NetworkStats? = null
+          try {
+            stats = nsm.querySummary(networkType, null, sessionStart, now)
+            val bucket = NetworkStats.Bucket()
+            while (stats.hasNextBucket()) {
+              stats.getNextBucket(bucket)
+              val uid = bucket.uid
+              if (uid < 10000) continue
+              val bytes = bucket.rxBytes + bucket.txBytes
+              if (bytes < 1024) continue
+              val info = uidToLabel[uid] ?: continue
+              val existing = result.find { it["packageName"] == info.first }
+              if (existing != null) {
+                val cur = existing["bytes"] as Long
+                existing["bytes"] = cur + bytes
+              } else {
+                result.add(mutableMapOf(
+                  "packageName" to info.first,
+                  "label" to info.second,
+                  "bytes" to bytes
+                ))
+              }
+            }
+          } catch (e: RemoteException) {
+            e.printStackTrace()
+          } finally {
+            stats?.close()
           }
-
-          result.add(mapOf(
-            "packageName" to mainApp.packageName,
-            "label" to label,
-            "bytes" to delta
-          ))
         }
 
+        queryAndAdd(ConnectivityManager.TYPE_MOBILE)
+        queryAndAdd(ConnectivityManager.TYPE_WIFI)
+
         result.sortByDescending { it["bytes"] as Long }
-        promise.resolve(result.take(30))
+        promise.resolve(result.take(40))
       } catch (e: Exception) {
         e.printStackTrace()
         promise.resolve(emptyList<Map<String, Any>>())
@@ -179,6 +199,15 @@ class ExpoNetworkUsageModule : Module() {
     }
   }
 
+  private fun getCachedApps(pm: PackageManager): List<ApplicationInfo> {
+    val now = System.currentTimeMillis()
+    if (cachedApps == null || now - lastAppsLoad > 60_000) {
+      cachedApps = pm.getInstalledApplications(0)
+      lastAppsLoad = now
+    }
+    return cachedApps ?: emptyList()
+  }
+
   private fun checkUsageAccess(): Boolean {
     val ctx = appContext.reactContext ?: return false
     return try {
@@ -200,24 +229,6 @@ class ExpoNetworkUsageModule : Module() {
       mode == AppOpsManager.MODE_ALLOWED
     } catch (e: Exception) {
       false
-    }
-  }
-
-  private fun snapshotBaselines() {
-    val ctx = appContext.reactContext ?: return
-    try {
-      val pm = ctx.packageManager
-      val apps = pm.getInstalledApplications(0)
-      val uids = apps.map { it.uid }.toSet()
-      for (uid in uids) {
-        val rx = TrafficStats.getUidRxBytes(uid)
-        val tx = TrafficStats.getUidTxBytes(uid)
-        if (rx >= 0 && tx >= 0) {
-          uidBaseline[uid] = rx + tx
-        }
-      }
-    } catch (e: Exception) {
-      e.printStackTrace()
     }
   }
 }
