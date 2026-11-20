@@ -28,7 +28,12 @@ Notifications.setNotificationHandler({
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRAPH_HEIGHT = 140;
 const GRAPH_WIDTH = SCREEN_WIDTH - 32;
-const SAMPLE_INTERVAL_MS = 10000;
+
+const INTERVALS = [
+  { label: '1s', ms: 1000 },
+  { label: '30s', ms: 30000 },
+  { label: '1m', ms: 60000 },
+];
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '0 KB';
@@ -129,6 +134,7 @@ export default function App() {
   const [speedHistory, setSpeedHistory] = useState([]);
   const [dayMax, setDayMax] = useState(0);
   const [dayAvg, setDayAvg] = useState(0);
+  const [sampleInterval, setSampleInterval] = useState(30000);
 
   const [apps, setApps] = useState([]);
   const [sessionStart, setSessionStart] = useState(0);
@@ -143,10 +149,15 @@ export default function App() {
   const appTick = useRef(0);
   const daySamplesRef = useRef([]);
   const lastSampleTime = useRef(0);
+  const sampleIntervalRef = useRef(30000);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
   }, [dailyData]);
+
+  useEffect(() => {
+    sampleIntervalRef.current = sampleInterval;
+  }, [sampleInterval]);
 
   useEffect(() => {
     (async () => {
@@ -160,6 +171,14 @@ export default function App() {
         const start = await NetworkUsage.startSession?.();
         if (start) setSessionStart(start);
         await loadDaySamples();
+        const saved = await AsyncStorage.getItem('sampleInterval');
+        if (saved) {
+          const ms = parseInt(saved, 10);
+          if (ms > 0) {
+            setSampleInterval(ms);
+            sampleIntervalRef.current = ms;
+          }
+        }
       } catch (e) {
         console.log('Init error:', e);
       }
@@ -254,6 +273,12 @@ export default function App() {
     AsyncStorage.setItem(`speedSamples_${today}`, JSON.stringify(daySamplesRef.current)).catch(() => {});
   };
 
+  const changeInterval = async (ms) => {
+    setSampleInterval(ms);
+    sampleIntervalRef.current = ms;
+    AsyncStorage.setItem('sampleInterval', String(ms)).catch(() => {});
+  };
+
   const refreshTodayFromService = async () => {
     if (Platform.OS !== 'android') return;
     try {
@@ -312,7 +337,7 @@ export default function App() {
         historyRef.current = hist;
         setSpeedHistory([...hist]);
 
-        if (now - lastSampleTime.current >= SAMPLE_INTERVAL_MS) {
+        if (now - lastSampleTime.current >= sampleIntervalRef.current) {
           lastSampleTime.current = now;
           saveDaySample(rxBps);
         }
@@ -433,6 +458,21 @@ export default function App() {
           <View style={styles.dayStats}>
             <Text style={styles.dayStatText}>Today max  {formatSpeed(dayMax)}</Text>
             <Text style={styles.dayStatText}>Today avg  {formatSpeed(dayAvg)}</Text>
+          </View>
+
+          <View style={styles.intervalRow}>
+            <Text style={styles.intervalLabel}>Sample every</Text>
+            {INTERVALS.map((opt) => (
+              <Pressable
+                key={opt.ms}
+                style={[styles.intervalBtn, sampleInterval === opt.ms && styles.intervalBtnActive]}
+                onPress={() => changeInterval(opt.ms)}
+              >
+                <Text style={[styles.intervalBtnText, sampleInterval === opt.ms && styles.intervalBtnTextActive]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
           <View style={styles.tableHeader}>
@@ -602,10 +642,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     backgroundColor: '#1a1a1a',
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   dayStatText: { color: '#aaa', fontSize: 13 },
+
+  intervalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingBottom: 10,
+    gap: 8,
+  },
+  intervalLabel: { color: '#666', fontSize: 12, marginRight: 4 },
+  intervalBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  intervalBtnActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  intervalBtnText: { color: '#888', fontSize: 12 },
+  intervalBtnTextActive: { color: '#fff', fontWeight: '600' },
 
   appRow: {
     flexDirection: 'row',
