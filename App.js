@@ -28,6 +28,7 @@ Notifications.setNotificationHandler({
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRAPH_HEIGHT = 140;
 const GRAPH_WIDTH = SCREEN_WIDTH - 32;
+const SAMPLE_INTERVAL_MS = 10000;
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '0 KB';
@@ -126,6 +127,8 @@ export default function App() {
   const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
   const [speedHistory, setSpeedHistory] = useState([]);
+  const [dayMax, setDayMax] = useState(0);
+  const [dayAvg, setDayAvg] = useState(0);
 
   const [apps, setApps] = useState([]);
   const [sessionStart, setSessionStart] = useState(0);
@@ -138,6 +141,8 @@ export default function App() {
   const intervalRef = useRef(null);
   const historyRef = useRef([]);
   const appTick = useRef(0);
+  const daySamplesRef = useRef([]);
+  const lastSampleTime = useRef(0);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -154,6 +159,7 @@ export default function App() {
         if (access) refreshApps();
         const start = await NetworkUsage.startSession?.();
         if (start) setSessionStart(start);
+        await loadDaySamples();
       } catch (e) {
         console.log('Init error:', e);
       }
@@ -213,6 +219,41 @@ export default function App() {
     }
   };
 
+  const loadDaySamples = async () => {
+    try {
+      const today = toISODate(new Date());
+      const raw = await AsyncStorage.getItem(`speedSamples_${today}`);
+      if (raw) {
+        const samples = JSON.parse(raw);
+        daySamplesRef.current = Array.isArray(samples) ? samples : [];
+        updateDayStats();
+      }
+    } catch (e) {}
+  };
+
+  const updateDayStats = () => {
+    const samples = daySamplesRef.current;
+    if (!samples.length) {
+      setDayMax(0);
+      setDayAvg(0);
+      return;
+    }
+    const max = Math.max(...samples);
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    setDayMax(max);
+    setDayAvg(avg);
+  };
+
+  const saveDaySample = async (bps) => {
+    const today = toISODate(new Date());
+    daySamplesRef.current.push(bps);
+    if (daySamplesRef.current.length > 8640) {
+      daySamplesRef.current = daySamplesRef.current.slice(-8640);
+    }
+    updateDayStats();
+    AsyncStorage.setItem(`speedSamples_${today}`, JSON.stringify(daySamplesRef.current)).catch(() => {});
+  };
+
   const refreshTodayFromService = async () => {
     if (Platform.OS !== 'android') return;
     try {
@@ -270,6 +311,11 @@ export default function App() {
         if (hist.length > 60) hist.shift();
         historyRef.current = hist;
         setSpeedHistory([...hist]);
+
+        if (now - lastSampleTime.current >= SAMPLE_INTERVAL_MS) {
+          lastSampleTime.current = now;
+          saveDaySample(rxBps);
+        }
       }
     } catch (e) {
       console.log('Speed error:', e.message || e);
@@ -383,6 +429,11 @@ export default function App() {
           </View>
 
           <SpeedGraph data={speedHistory} />
+
+          <View style={styles.dayStats}>
+            <Text style={styles.dayStatText}>Today max  {formatSpeed(dayMax)}</Text>
+            <Text style={styles.dayStatText}>Today avg  {formatSpeed(dayAvg)}</Text>
+          </View>
 
           <View style={styles.tableHeader}>
             <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
@@ -545,6 +596,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
   },
   graphEmptyText: { color: '#666', fontSize: 13 },
+
+  dayStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  dayStatText: { color: '#aaa', fontSize: 13 },
 
   appRow: {
     flexDirection: 'row',
