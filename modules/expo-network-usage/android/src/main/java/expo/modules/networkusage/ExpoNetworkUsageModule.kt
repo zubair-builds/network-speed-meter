@@ -51,44 +51,6 @@ class ExpoNetworkUsageModule : Module() {
       }
     }
 
-    AsyncFunction("getIconSettings") { promise: Promise ->
-      val ctx = appContext.reactContext
-      if (ctx != null) {
-        val prefs = ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
-        promise.resolve(mapOf(
-          "size" to prefs.getInt("icon_size", 80),
-          "style" to (prefs.getString("icon_style", "bold") ?: "bold")
-        ))
-      } else {
-        promise.resolve(mapOf("size" to 80, "style" to "bold"))
-      }
-    }
-
-    AsyncFunction("setIconSize") { size: Int, promise: Promise ->
-      val clamped = size.coerceIn(64, 160)
-      val ctx = appContext.reactContext
-      if (ctx != null) {
-        ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
-          .edit()
-          .putInt("icon_size", clamped)
-          .apply()
-      }
-      SpeedService.instance?.setIconSize(clamped)
-      promise.resolve(true)
-    }
-
-    AsyncFunction("setIconStyle") { style: String, promise: Promise ->
-      val ctx = appContext.reactContext
-      if (ctx != null) {
-        ctx.getSharedPreferences("speed_meter_prefs", Context.MODE_PRIVATE)
-          .edit()
-          .putString("icon_style", style)
-          .apply()
-      }
-      SpeedService.instance?.setIconStyle(style)
-      promise.resolve(true)
-    }
-
     AsyncFunction("startSpeedService") { promise: Promise ->
       try {
         val ctx = appContext.reactContext ?: run {
