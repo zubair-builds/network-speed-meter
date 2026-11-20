@@ -190,6 +190,12 @@ class SpeedService : Service() {
     return "Mobile: ${formatBytes(todayMobile)}  WiFi: ${formatBytes(todayWifi)}"
   }
 
+  private fun textBounds(paint: Paint, text: String): Rect {
+    val r = Rect()
+    paint.getTextBounds(text, 0, text.length, r)
+    return r
+  }
+
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
     val size = 128
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -197,8 +203,9 @@ class SpeedService : Service() {
     canvas.drawColor(Color.TRANSPARENT)
 
     val inset = 2f
-    val maxWidth = size - inset * 2
-    val maxHeight = size - inset * 2
+    val maxW = size - inset * 2
+    val maxH = size - inset * 2
+    val gap = 2f
 
     val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
@@ -216,43 +223,38 @@ class SpeedService : Service() {
       typeface = condensedBold
     }
 
-    var numSize = 68f
-    var unitSize = 44f
-    val gap = 4f
+    var numSize = 78f
+    var unitSize = 54f
 
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 24f) {
+    while (textBounds(numPaint, number).width() > maxW && numSize > 28f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
     unitPaint.textSize = unitSize
-    while (unitPaint.measureText(unit) > maxWidth && unitSize > 16f) {
+    while (textBounds(unitPaint, unit).width() > maxW && unitSize > 20f) {
       unitSize -= 1f
       unitPaint.textSize = unitSize
     }
 
-    var numFm = numPaint.fontMetrics
-    var unitFm = unitPaint.fontMetrics
-    var numHeight = numFm.descent - numFm.ascent
-    var unitHeight = unitFm.descent - unitFm.ascent
-    var totalHeight = numHeight + gap + unitHeight
+    var numBounds = textBounds(numPaint, number)
+    var unitBounds = textBounds(unitPaint, unit)
+    var totalH = numBounds.height() + gap + unitBounds.height()
 
-    while (totalHeight > maxHeight && numSize > 24f) {
+    while (totalH > maxH && numSize > 28f) {
       numSize -= 2f
-      unitSize = (unitSize * 0.95f).coerceAtLeast(16f)
+      unitSize = (unitSize * 0.96f).coerceAtLeast(20f)
       numPaint.textSize = numSize
       unitPaint.textSize = unitSize
-      numFm = numPaint.fontMetrics
-      unitFm = unitPaint.fontMetrics
-      numHeight = numFm.descent - numFm.ascent
-      unitHeight = unitFm.descent - unitFm.ascent
-      totalHeight = numHeight + gap + unitHeight
+      numBounds = textBounds(numPaint, number)
+      unitBounds = textBounds(unitPaint, unit)
+      totalH = numBounds.height() + gap + unitBounds.height()
     }
 
-    val startY = (size - totalHeight) / 2f
-    val numBaseline = startY - numFm.ascent
-    val unitBaseline = startY + numHeight + gap - unitFm.ascent
+    val top = (size - totalH) / 2f
+    val numBaseline = top - numBounds.top
+    val unitBaseline = top + numBounds.height() + gap - unitBounds.top
 
     val x = size / 2f
     canvas.drawText(number, x, numBaseline, numPaint)
