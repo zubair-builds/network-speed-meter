@@ -24,6 +24,7 @@ class SpeedService : Service() {
   private var lastMobileRx = 0L
   private var lastMobileTx = 0L
   private var lastTime = 0L
+  private var hasBaseline = false
 
   private var todayMobile = 0L
   private var todayWifi = 0L
@@ -32,7 +33,8 @@ class SpeedService : Service() {
   private val CHANNEL_ID = "speed_service"
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
-  private val MAX_DELTA_BYTES = 50L * 1024 * 1024
+  private val MAX_DELTA_BYTES = 20L * 1024 * 1024
+  private val MAX_GAP_MS = 5L * 60 * 1000
 
   companion object {
     @Volatile
@@ -43,6 +45,7 @@ class SpeedService : Service() {
     super.onCreate()
     instance = this
     loadTodayTotals()
+    loadBaseline()
     createNotificationChannel()
     val notification = buildNotification("0", "KB/s", formatUsage())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -81,6 +84,26 @@ class SpeedService : Service() {
       todayDate = current
       saveTodayTotals()
     }
+  }
+
+  private fun loadBaseline() {
+    val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    lastRx = prefs.getLong("lastRx", 0L)
+    lastTx = prefs.getLong("lastTx", 0L)
+    lastMobileRx = prefs.getLong("lastMobileRx", 0L)
+    lastMobileTx = prefs.getLong("lastMobileTx", 0L)
+    lastTime = prefs.getLong("lastTime", 0L)
+    hasBaseline = lastTime > 0 && lastRx > 0
+  }
+
+  private fun saveBaseline() {
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+      .putLong("lastRx", lastRx)
+      .putLong("lastTx", lastTx)
+      .putLong("lastMobileRx", lastMobileRx)
+      .putLong("lastMobileTx", lastMobileTx)
+      .putLong("lastTime", lastTime)
+      .apply()
   }
 
   private fun saveTodayTotals() {
@@ -128,37 +151,46 @@ class SpeedService : Service() {
       saveTodayTotals()
     }
 
-    if (lastTime > 0) {
-      val elapsed = (now - lastTime) / 1000.0
-      if (elapsed > 0) {
-        var deltaRx = (rx - lastRx).coerceAtLeast(0)
-        var deltaTx = (tx - lastTx).coerceAtLeast(0)
-        var deltaMobile = if (mobileSupported) {
-          ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
-        } else 0L
-        var deltaTotal = (deltaRx + deltaTx).coerceAtLeast(0)
+    val gap = if (lastTime > 0) now - lastTime else Long.MAX_VALUE
+    val baselineOk = hasBaseline && gap > 0 && gap < MAX_GAP_MS
 
-        if (deltaTotal > MAX_DELTA_BYTES) {
-          deltaRx = 0
-          deltaTx = 0
-          deltaMobile = 0
-          deltaTotal = 0
-        }
+    if (baselineOk) {
+      val elapsed = gap / 1000.0
+      var deltaRx = (rx - lastRx).coerceAtLeast(0)
+      var deltaTx = (tx - lastTx).coerceAtLeast(0)
+      var deltaMobile = if (mobileSupported) {
+        ((mRx - lastMobileRx) + (mTx - lastMobileTx)).coerceAtLeast(0)
+      } else 0L
+      var deltaTotal = (deltaRx + deltaTx).coerceAtLeast(0)
 
-        val deltaWifi = if (mobileSupported) {
-          (deltaTotal - deltaMobile).coerceAtLeast(0)
-        } else {
-          deltaTotal
-        }
-
-        todayMobile += deltaMobile
-        todayWifi += deltaWifi
-        if (deltaTotal > 0) saveTodayTotals()
-
-        val rxSpeed = deltaRx / elapsed
-        val (number, unit) = formatSpeedParts(rxSpeed)
-        updateNotification(number, unit, formatUsage())
+      if (deltaTotal > MAX_DELTA_BYTES || deltaMobile > MAX_DELTA_BYTES) {
+        deltaRx = 0
+        deltaTx = 0
+        deltaMobile = 0
+        deltaTotal = 0
       }
+
+      // Cap mobile so it never exceeds the total delta
+      if (deltaMobile > deltaTotal) {
+        deltaMobile = deltaTotal
+      }
+
+      val deltaWifi = if (mobileSupported) {
+        (deltaTotal - deltaMobile).coerceAtLeast(0)
+      } else {
+        deltaTotal
+      }
+
+      todayMobile += deltaMobile
+      todayWifi += deltaWifi
+      if (deltaTotal > 0) saveTodayTotals()
+
+      val rxSpeed = deltaRx / elapsed
+      val (number, unit) = formatSpeedParts(rxSpeed)
+      updateNotification(number, unit, formatUsage())
+    } else {
+      // First sample or large gap: set baseline only, do not count
+      updateNotification("0", "KB/s", formatUsage())
     }
 
     lastRx = rx
@@ -166,6 +198,8 @@ class SpeedService : Service() {
     lastMobileRx = if (mobileSupported) mRx else 0L
     lastMobileTx = if (mobileSupported) mTx else 0L
     lastTime = now
+    hasBaseline = true
+    saveBaseline()
   }
 
   private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
