@@ -29,6 +29,7 @@
         "RECEIVE_BOOT_COMPLETED"
       ]
     },
+    "plugins": ["./plugins/withRemoveSystemAlert"],
     "web": {
       "favicon": "./assets/favicon.png"
     },
