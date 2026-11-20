@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Pressable,
   Dimensions,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
@@ -51,6 +52,11 @@ const formatDuration = (ms) => {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+const formatAxis = (bytesPerSec) => {
+  if (bytesPerSec < 1024 * 1024) return `${Math.round(bytesPerSec / 1024)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
 };
 
 const toISODate = (date) => {
@@ -102,7 +108,7 @@ function SpeedGraph({ data }) {
           stroke="#4CAF50"
           strokeWidth="2"
         />
-        <SvgText x="4" y="14" fill="#888" fontSize="10">{Math.round(max / 1024)} KB/s</SvgText>
+        <SvgText x="4" y="14" fill="#888" fontSize="10">{formatAxis(max)}</SvgText>
         <SvgText x={GRAPH_WIDTH - 24} y={GRAPH_HEIGHT - 14} fill="#666" fontSize="10">60s</SvgText>
       </Svg>
     </View>
@@ -125,11 +131,13 @@ export default function App() {
   const [sessionStart, setSessionStart] = useState(0);
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [hasAccess, setHasAccess] = useState(true);
+  const [sessionTotal, setSessionTotal] = useState(0);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
   const intervalRef = useRef(null);
   const historyRef = useRef([]);
+  const appTick = useRef(0);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -152,6 +160,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state === 'active' && Platform.OS === 'android') {
+        try {
+          const access = await NetworkUsage.hasUsageAccess?.();
+          setHasAccess(!!access);
+        } catch (e) {}
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -159,7 +179,10 @@ export default function App() {
     intervalRef.current = setInterval(() => {
       updateSpeed();
       refreshTodayFromService();
-      if (tab === 'apps') refreshApps();
+      appTick.current += 1;
+      if (appTick.current % 3 === 0) {
+        refreshApps();
+      }
       if (sessionStart > 0) {
         setSessionElapsed(Date.now() - sessionStart);
       }
@@ -168,7 +191,7 @@ export default function App() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [tab, sessionStart]);
+  }, [sessionStart]);
 
   const loadData = async () => {
     try {
@@ -255,7 +278,11 @@ export default function App() {
     if (Platform.OS !== 'android') return;
     try {
       const list = await NetworkUsage.getAppUsage?.();
-      if (Array.isArray(list)) setApps(list);
+      if (Array.isArray(list)) {
+        setApps(list);
+        const sum = list.reduce((s, a) => s + (a.bytes || 0), 0);
+        setSessionTotal(sum);
+      }
     } catch (e) {}
   };
 
@@ -307,8 +334,6 @@ export default function App() {
     const mb = bytes / (1024 * 1024);
     return mb > 150 ? '#ffffff' : '#e5e7eb';
   };
-
-  const sessionTotal = apps.reduce((sum, a) => sum + (a.bytes || 0), 0);
 
   const renderRow = ({ item }) => (
     <View style={styles.row}>
