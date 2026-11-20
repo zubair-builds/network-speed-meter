@@ -44,7 +44,7 @@ class SpeedService : Service() {
     instance = this
     loadTodayTotals()
     createNotificationChannel()
-    val notification = buildNotification("0", "B/s", formatUsage())
+    val notification = buildNotification("0", "KB/s", formatUsage())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
     } else {
@@ -196,34 +196,35 @@ class SpeedService : Service() {
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val inset = 1f
+    val inset = 2f
     val maxWidth = size - inset * 2
+
+    val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
     val numPaint = Paint().apply {
       color = Color.WHITE
       isAntiAlias = true
-      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
-      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+      typeface = condensedBold
     }
 
     val unitPaint = Paint().apply {
       color = Color.WHITE
       isAntiAlias = true
       textAlign = Paint.Align.CENTER
-      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+      typeface = condensedBold
     }
 
-    var numSize = 78f
+    var numSize = 68f
     numPaint.textSize = numSize
     while (numPaint.measureText(number) > maxWidth && numSize > 28f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    var unitSize = 22f
+    var unitSize = 44f
     unitPaint.textSize = unitSize
-    while (unitPaint.measureText(unit) > maxWidth && unitSize > 12f) {
+    while (unitPaint.measureText(unit) > maxWidth && unitSize > 20f) {
       unitSize -= 1f
       unitPaint.textSize = unitSize
     }
@@ -232,7 +233,7 @@ class SpeedService : Service() {
     val unitFm = unitPaint.fontMetrics
     val numHeight = numFm.descent - numFm.ascent
     val unitHeight = unitFm.descent - unitFm.ascent
-    val gap = -2f
+    val gap = 4f
     val totalHeight = numHeight + gap + unitHeight
     val startY = (size - totalHeight) / 2f
 
