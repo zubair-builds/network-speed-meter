@@ -5,12 +5,10 @@ import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.TrafficStats
 import android.os.Build
-import android.os.RemoteException
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -22,8 +20,6 @@ class ExpoNetworkUsageModule : Module() {
 
   companion object {
     private var sessionStart = 0L
-    private var cachedApps: List<ApplicationInfo>? = null
-    private var lastAppsLoad = 0L
   }
 
   override fun definition() = ModuleDefinition {
@@ -112,17 +108,7 @@ class ExpoNetworkUsageModule : Module() {
         val pm = ctx.packageManager
         val now = System.currentTimeMillis()
 
-        val apps = getCachedApps(pm)
-        val uidToLabel = mutableMapOf<Int, Pair<String, String>>()
-        for (app in apps) {
-          if (app.uid < 10000) continue
-          if (!uidToLabel.containsKey(app.uid)) {
-            val label = try { pm.getApplicationLabel(app).toString() } catch (e: Exception) { app.packageName }
-            uidToLabel[app.uid] = app.packageName to label
-          }
-        }
-
-        val result = mutableListOf<Map<String, Any>>()
+        val uidBytes = mutableMapOf<Int, Long>()
 
         fun queryAndAdd(networkType: Int) {
           var stats: NetworkStats? = null
@@ -134,21 +120,9 @@ class ExpoNetworkUsageModule : Module() {
               val uid = bucket.uid
               if (uid < 10000) continue
               val bytes = bucket.rxBytes + bucket.txBytes
-              if (bytes < 1024) continue
-              val info = uidToLabel[uid] ?: continue
-              val existing = result.find { it["packageName"] == info.first }
-              if (existing != null) {
-                val cur = existing["bytes"] as Long
-                existing["bytes"] = cur + bytes
-              } else {
-                result.add(mutableMapOf(
-                  "packageName" to info.first,
-                  "label" to info.second,
-                  "bytes" to bytes
-                ))
-              }
+              uidBytes[uid] = (uidBytes[uid] ?: 0L) + bytes
             }
-          } catch (e: RemoteException) {
+          } catch (e: Exception) {
             e.printStackTrace()
           } finally {
             stats?.close()
@@ -157,6 +131,24 @@ class ExpoNetworkUsageModule : Module() {
 
         queryAndAdd(ConnectivityManager.TYPE_MOBILE)
         queryAndAdd(ConnectivityManager.TYPE_WIFI)
+
+        val result = mutableListOf<Map<String, Any>>()
+        for ((uid, bytes) in uidBytes) {
+          if (bytes < 1024) continue
+          val pkgs = pm.getPackagesForUid(uid) ?: continue
+          val packageName = pkgs.firstOrNull() ?: continue
+          val label = try {
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString()
+          } catch (e: Exception) {
+            packageName
+          }
+          result.add(mapOf(
+            "packageName" to packageName,
+            "label" to label,
+            "bytes" to bytes
+          ))
+        }
 
         result.sortByDescending { it["bytes"] as Long }
         promise.resolve(result.take(40))
@@ -197,15 +189,6 @@ class ExpoNetworkUsageModule : Module() {
         promise.resolve(false)
       }
     }
-  }
-
-  private fun getCachedApps(pm: PackageManager): List<ApplicationInfo> {
-    val now = System.currentTimeMillis()
-    if (cachedApps == null || now - lastAppsLoad > 60_000) {
-      cachedApps = pm.getInstalledApplications(0)
-      lastAppsLoad = now
-    }
-    return cachedApps ?: emptyList()
   }
 
   private fun checkUsageAccess(): Boolean {
