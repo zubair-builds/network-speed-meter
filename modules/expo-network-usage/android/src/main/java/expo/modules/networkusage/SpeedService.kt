@@ -283,6 +283,7 @@ class SpeedService : Service() {
       .setContentText(usage)
       .setSmallIcon(icon)
       .setOngoing(true)
+      .setShowWhen(false)
       .setContentIntent(pending)
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setSilent(true)
