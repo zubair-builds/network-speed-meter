@@ -9,10 +9,12 @@ import {
   Platform,
   TouchableOpacity,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
 import * as Notifications from 'expo-notifications';
+import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -21,6 +23,10 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRAPH_HEIGHT = 140;
+const GRAPH_WIDTH = SCREEN_WIDTH - 32;
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '0 KB';
@@ -70,6 +76,39 @@ const parseISODate = (iso) => {
   return new Date(y, m - 1, d);
 };
 
+function SpeedGraph({ data }) {
+  if (!data || data.length < 2) {
+    return (
+      <View style={styles.graphEmpty}>
+        <Text style={styles.graphEmptyText}>Collecting speed...</Text>
+      </View>
+    );
+  }
+
+  const max = Math.max(...data, 1);
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * GRAPH_WIDTH;
+    const y = GRAPH_HEIGHT - (v / max) * (GRAPH_HEIGHT - 20) - 10;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <View style={styles.graphWrap}>
+      <Svg width={GRAPH_WIDTH} height={GRAPH_HEIGHT}>
+        <Line x1="0" y1={GRAPH_HEIGHT - 10} x2={GRAPH_WIDTH} y2={GRAPH_HEIGHT - 10} stroke="#333" strokeWidth="1" />
+        <Polyline
+          points={points}
+          fill="none"
+          stroke="#4CAF50"
+          strokeWidth="2"
+        />
+        <SvgText x="4" y="14" fill="#888" fontSize="10">{Math.round(max / 1024)} KB/s</SvgText>
+        <SvgText x={GRAPH_WIDTH - 24} y={GRAPH_HEIGHT - 14} fill="#666" fontSize="10">60s</SvgText>
+      </Svg>
+    </View>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState('speed');
   const [dailyData, setDailyData] = useState([]);
@@ -80,6 +119,7 @@ export default function App() {
   });
   const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
+  const [speedHistory, setSpeedHistory] = useState([]);
 
   const [apps, setApps] = useState([]);
   const [sessionStart, setSessionStart] = useState(0);
@@ -89,6 +129,7 @@ export default function App() {
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
   const intervalRef = useRef(null);
+  const historyRef = useRef([]);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -102,10 +143,8 @@ export default function App() {
         await NetworkUsage.startSpeedService?.();
         const access = await NetworkUsage.hasUsageAccess?.();
         setHasAccess(!!access);
-        if (access) {
-          const start = await NetworkUsage.startSession?.();
-          if (start) setSessionStart(start);
-        }
+        const start = await NetworkUsage.startSession?.();
+        if (start) setSessionStart(start);
       } catch (e) {
         console.log('Init error:', e);
       }
@@ -198,8 +237,14 @@ export default function App() {
       if (elapsed > 0 && last.totalRx > 0) {
         const deltaRx = Math.max(0, total.rx - last.totalRx);
         const deltaTx = Math.max(0, total.tx - last.totalTx);
-        setDownloadSpeed(formatSpeed(deltaRx / elapsed));
+        const rxBps = deltaRx / elapsed;
+        setDownloadSpeed(formatSpeed(rxBps));
         setUploadSpeed(formatSpeed(deltaTx / elapsed));
+
+        const hist = [...historyRef.current, rxBps];
+        if (hist.length > 60) hist.shift();
+        historyRef.current = hist;
+        setSpeedHistory([...hist]);
       }
     } catch (e) {
       console.log('Speed error:', e.message || e);
@@ -293,14 +338,25 @@ export default function App() {
 
       {tab === 'speed' ? (
         <>
+          <View style={styles.sessionBar}>
+            <View style={styles.sessionItem}>
+              <Text style={styles.sessionValue}>{formatDuration(sessionElapsed)}</Text>
+              <Text style={styles.sessionLabel}>Session Time</Text>
+            </View>
+            <View style={styles.sessionDivider} />
+            <View style={styles.sessionItem}>
+              <Text style={styles.sessionValue}>{formatBytes(sessionTotal)}</Text>
+              <Text style={styles.sessionLabel}>Session Usage</Text>
+            </View>
+          </View>
+
           <View style={styles.topBar}>
             <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
             <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
           </View>
 
-          <View style={styles.header}>
-            <Text style={styles.title}>Internet Speed Meter</Text>
-          </View>
+          <SpeedGraph data={speedHistory} />
+
           <View style={styles.tableHeader}>
             <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
             <Text style={styles.headerCell}>Mobile</Text>
@@ -397,15 +453,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   topBar: {
     backgroundColor: '#1a1a1a',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
   },
   speedLabel: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
-  header: { backgroundColor: '#1a1a1a', padding: 14 },
-  title: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#1e1e1e',
@@ -443,13 +497,27 @@ const styles = StyleSheet.create({
   sessionBar: {
     backgroundColor: '#1e3a5f',
     flexDirection: 'row',
-    paddingVertical: 20,
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
   sessionItem: { flex: 1, alignItems: 'center' },
   sessionValue: { color: '#fff', fontSize: 22, fontWeight: '600' },
-  sessionLabel: { color: '#a0c4e8', fontSize: 12, marginTop: 4 },
+  sessionLabel: { color: '#a0c4e8', fontSize: 12, marginTop: 2 },
   sessionDivider: { width: 1, backgroundColor: '#2a5a8a', marginVertical: 4 },
+
+  graphWrap: {
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  graphEmpty: {
+    height: GRAPH_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+  },
+  graphEmptyText: { color: '#666', fontSize: 13 },
 
   appRow: {
     flexDirection: 'row',
