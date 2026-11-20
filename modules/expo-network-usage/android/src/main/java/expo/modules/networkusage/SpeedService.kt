@@ -198,6 +198,7 @@ class SpeedService : Service() {
 
     val inset = 2f
     val maxWidth = size - inset * 2
+    val maxHeight = size - inset * 2
 
     val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
@@ -216,27 +217,40 @@ class SpeedService : Service() {
     }
 
     var numSize = 68f
+    var unitSize = 44f
+    val gap = 4f
+
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 28f) {
+    while (numPaint.measureText(number) > maxWidth && numSize > 24f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    var unitSize = 44f
     unitPaint.textSize = unitSize
-    while (unitPaint.measureText(unit) > maxWidth && unitSize > 20f) {
+    while (unitPaint.measureText(unit) > maxWidth && unitSize > 16f) {
       unitSize -= 1f
       unitPaint.textSize = unitSize
     }
 
-    val numFm = numPaint.fontMetrics
-    val unitFm = unitPaint.fontMetrics
-    val numHeight = numFm.descent - numFm.ascent
-    val unitHeight = unitFm.descent - unitFm.ascent
-    val gap = 4f
-    val totalHeight = numHeight + gap + unitHeight
-    val startY = (size - totalHeight) / 2f
+    var numFm = numPaint.fontMetrics
+    var unitFm = unitPaint.fontMetrics
+    var numHeight = numFm.descent - numFm.ascent
+    var unitHeight = unitFm.descent - unitFm.ascent
+    var totalHeight = numHeight + gap + unitHeight
 
+    while (totalHeight > maxHeight && numSize > 24f) {
+      numSize -= 2f
+      unitSize = (unitSize * 0.95f).coerceAtLeast(16f)
+      numPaint.textSize = numSize
+      unitPaint.textSize = unitSize
+      numFm = numPaint.fontMetrics
+      unitFm = unitPaint.fontMetrics
+      numHeight = numFm.descent - numFm.ascent
+      unitHeight = unitFm.descent - unitFm.ascent
+      totalHeight = numHeight + gap + unitHeight
+    }
+
+    val startY = (size - totalHeight) / 2f
     val numBaseline = startY - numFm.ascent
     val unitBaseline = startY + numHeight + gap - unitFm.ascent
 
