@@ -205,7 +205,7 @@ class SpeedService : Service() {
     val inset = 2f
     val maxW = size - inset * 2
     val maxH = size - inset * 2
-    val gap = 2f
+    val gap = 8f
 
     val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
