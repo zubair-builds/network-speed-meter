@@ -7,8 +7,6 @@ import {
   FlatList,
   StatusBar,
   Platform,
-  TouchableOpacity,
-  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
@@ -32,8 +30,8 @@ const formatBytes = (bytes) => {
 const formatSpeed = (bytesPerSec) => {
   if (!bytesPerSec || bytesPerSec < 0) return '0 B/s';
   if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
-  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  if (bytesPerSec < 1024 * 1024) return `${Math.round(bytesPerSec / 1024)} KB/s`;
+  return `${Math.round(bytesPerSec / (1024 * 1024))} MB/s`;
 };
 
 const toISODate = (date) => {
@@ -59,12 +57,6 @@ const parseISODate = (iso) => {
   return new Date(y, m - 1, d);
 };
 
-const STYLES = [
-  { label: 'Normal', value: 'normal' },
-  { label: 'Bold', value: 'bold' },
-  { label: 'Compact', value: 'compact' },
-];
-
 export default function App() {
   const [dailyData, setDailyData] = useState([]);
   const [summary, setSummary] = useState({
@@ -74,10 +66,6 @@ export default function App() {
   });
   const [downloadSpeed, setDownloadSpeed] = useState('0 B/s');
   const [uploadSpeed, setUploadSpeed] = useState('0 B/s');
-  const [iconSize, setIconSize] = useState(80);
-  const [sizeInput, setSizeInput] = useState('80');
-  const [iconStyle, setIconStyle] = useState('bold');
-  const [showSettings, setShowSettings] = useState(false);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
@@ -93,14 +81,6 @@ export default function App() {
       try {
         await Notifications.requestPermissionsAsync();
         await NetworkUsage.startSpeedService?.();
-
-        const settings = await NetworkUsage.getIconSettings?.();
-        if (settings) {
-          const s = settings.size || 80;
-          setIconSize(s);
-          setSizeInput(String(s));
-          setIconStyle(settings.style || 'bold');
-        }
       } catch (e) {
         console.log('Init error:', e);
       }
@@ -228,24 +208,6 @@ export default function App() {
     setSummary({ last7, last30, thisMonth });
   };
 
-  const applySize = async (raw) => {
-    const n = parseInt(raw, 10);
-    if (isNaN(n)) return;
-    const clamped = Math.max(64, Math.min(160, n));
-    setIconSize(clamped);
-    setSizeInput(String(clamped));
-    try {
-      await NetworkUsage.setIconSize?.(clamped);
-    } catch (e) {}
-  };
-
-  const changeStyle = async (style) => {
-    setIconStyle(style);
-    try {
-      await NetworkUsage.setIconStyle?.(style);
-    } catch (e) {}
-  };
-
   const getHeatColor = (bytes) => {
     if (!bytes || bytes <= 0) return '#0d1117';
     const mb = bytes / (1024 * 1024);
@@ -284,46 +246,6 @@ export default function App() {
         <Text style={styles.speedLabel}>↓ {downloadSpeed}</Text>
         <Text style={styles.speedLabel}>↑ {uploadSpeed}</Text>
       </View>
-
-      <TouchableOpacity style={styles.settingsToggle} onPress={() => setShowSettings(!showSettings)}>
-        <Text style={styles.settingsToggleText}>{showSettings ? 'Hide Settings' : 'Icon Settings'}</Text>
-      </TouchableOpacity>
-
-      {showSettings && (
-        <View style={styles.settingsPanel}>
-          <Text style={styles.settingsLabel}>Icon Size (64–160)</Text>
-          <View style={styles.sizeRow}>
-            <TouchableOpacity style={styles.sizeBtn} onPress={() => applySize(iconSize - 4)}>
-              <Text style={styles.sizeBtnText}>−</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={styles.sizeInput}
-              value={sizeInput}
-              onChangeText={setSizeInput}
-              onBlur={() => applySize(sizeInput)}
-              keyboardType="number-pad"
-              maxLength={3}
-            />
-            <TouchableOpacity style={styles.sizeBtn} onPress={() => applySize(iconSize + 4)}>
-              <Text style={styles.sizeBtnText}>+</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.sizeHint}>Current: {iconSize}px</Text>
-
-          <Text style={styles.settingsLabel}>Style</Text>
-          <View style={styles.optionRow}>
-            {STYLES.map(s => (
-              <TouchableOpacity
-                key={s.value}
-                style={[styles.optionBtn, iconStyle === s.value && styles.optionBtnActive]}
-                onPress={() => changeStyle(s.value)}
-              >
-                <Text style={[styles.optionText, iconStyle === s.value && styles.optionTextActive]}>{s.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
 
       <View style={styles.header}>
         <Text style={styles.title}>Internet Speed Meter</Text>
@@ -377,57 +299,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   speedLabel: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
-  settingsToggle: {
-    backgroundColor: '#1e1e1e',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  settingsToggleText: { color: '#64B5F6', fontSize: 14 },
-  settingsPanel: {
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  settingsLabel: { color: '#aaa', fontSize: 12, marginBottom: 8, marginTop: 8 },
-  sizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  sizeBtn: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sizeBtnText: { color: '#fff', fontSize: 24, fontWeight: '600' },
-  sizeInput: {
-    width: 80,
-    height: 48,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  sizeHint: { color: '#666', fontSize: 12, textAlign: 'center', marginTop: 6 },
-  optionRow: { flexDirection: 'row', gap: 8 },
-  optionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  optionBtnActive: { backgroundColor: '#1d4ed8' },
-  optionText: { color: '#aaa', fontSize: 14 },
-  optionTextActive: { color: '#fff', fontWeight: '600' },
   header: { backgroundColor: '#1a1a1a', padding: 14 },
   title: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   tableHeader: {
