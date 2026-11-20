@@ -172,7 +172,10 @@ class SpeedService : Service() {
     return when {
       bytesPerSec < 1024 -> Pair("${bytesPerSec.roundToInt()}", "B")
       bytesPerSec < 1024 * 1024 -> Pair("${(bytesPerSec / 1024).roundToInt()}", "K")
-      else -> Pair("${(bytesPerSec / (1024 * 1024)).roundToInt()}", "M")
+      else -> {
+        val mb = bytesPerSec / (1024.0 * 1024.0)
+        Pair(String.format("%.1f", mb), "M")
+      }
     }
   }
 
@@ -210,14 +213,14 @@ class SpeedService : Service() {
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    var numSize = 52f
+    var numSize = 48f
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 20f) {
+    while (numPaint.measureText(number) > maxWidth && numSize > 18f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    val unitSize = 28f
+    val unitSize = 26f
     unitPaint.textSize = unitSize
 
     val numHeight = numPaint.fontMetrics.descent - numPaint.fontMetrics.ascent
