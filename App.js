@@ -88,6 +88,32 @@ const parseISODate = (iso) => {
   return new Date(y, m - 1, d);
 };
 
+function generateSampleData() {
+  const data = [];
+  const now = new Date();
+  const amounts = [
+    [1.37, 0.917], [1.86, 0.76], [0.694, 1.1], [0.456, 1.63],
+    [1.32, 0.762], [0.847, 1.9], [1.1, 1.12], [4.31, 0.145],
+    [1.54, 0.655], [1.34, 0.628], [1.07, 1.02], [0.366, 1.6],
+    [2.63, 3.99], [1.35, 1.64], [2.14, 0], [1.87, 0.048],
+    [1.28, 1.22], [1.1, 1.23], [2.13, 0.926], [1.4, 1.23],
+    [0.422, 0.98], [0.303, 1.4], [3.94, 0.583], [1.44, 0.769],
+    [2.44, 2.32], [2.5, 0.61], [1.08, 2.88], [0.8, 1.5],
+    [1.2, 0.9], [0.6, 1.1],
+  ];
+  for (let i = 0; i < amounts.length; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const [mob, wifi] = amounts[i];
+    data.push({
+      date: toISODate(d),
+      mobile: Math.round(mob * 1024 * 1024 * 1024),
+      wifi: Math.round(wifi * 1024 * 1024 * 1024),
+    });
+  }
+  return data;
+}
+
 function SpeedGraph({ data }) {
   if (!data || data.length < 2) {
     return (
@@ -236,6 +262,21 @@ export default function App() {
     } catch (e) {
       console.log(e);
     }
+  };
+
+  const loadSampleData = async () => {
+    const sample = generateSampleData();
+    dailyDataRef.current = sample;
+    setDailyData(sample);
+    calculateSummary(sample);
+    AsyncStorage.setItem('dailyUsage', JSON.stringify(sample)).catch(() => {});
+  };
+
+  const clearSampleData = async () => {
+    dailyDataRef.current = [];
+    setDailyData([]);
+    calculateSummary([]);
+    AsyncStorage.removeItem('dailyUsage').catch(() => {});
   };
 
   const loadDaySamples = async () => {
@@ -475,6 +516,15 @@ export default function App() {
             ))}
           </View>
 
+          <View style={styles.sampleRow}>
+            <Pressable style={styles.sampleBtn} onPress={loadSampleData}>
+              <Text style={styles.sampleBtnText}>Load sample data</Text>
+            </Pressable>
+            <Pressable style={styles.sampleBtn} onPress={clearSampleData}>
+              <Text style={styles.sampleBtnText}>Clear</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.tableHeader}>
             <Text style={[styles.headerCell, styles.dateCell]}>Date</Text>
             <Text style={styles.headerCell}>Mobile</Text>
@@ -650,7 +700,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a1a1a',
-    paddingBottom: 10,
+    paddingBottom: 6,
     gap: 8,
   },
   intervalLabel: { color: '#666', fontSize: 12, marginRight: 4 },
@@ -667,6 +717,21 @@ const styles = StyleSheet.create({
   },
   intervalBtnText: { color: '#888', fontSize: 12 },
   intervalBtnTextActive: { color: '#fff', fontWeight: '600' },
+
+  sampleRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingBottom: 10,
+    gap: 12,
+  },
+  sampleBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 4,
+    backgroundColor: '#333',
+  },
+  sampleBtnText: { color: '#ccc', fontSize: 12 },
 
   appRow: {
     flexDirection: 'row',
