@@ -191,17 +191,18 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
-    val size = 96
+    val size = 128
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val inset = 4f
+    val inset = 2f
     val maxWidth = size - inset * 2
 
     val numPaint = Paint().apply {
       color = Color.WHITE
       isAntiAlias = true
+      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
@@ -209,28 +210,31 @@ class SpeedService : Service() {
     val unitPaint = Paint().apply {
       color = Color.WHITE
       isAntiAlias = true
+      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    var numSize = 48f
+    var numSize = 72f
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 18f) {
+    while (numPaint.measureText(number) > maxWidth && numSize > 24f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    val unitSize = 26f
+    val unitSize = 36f
     unitPaint.textSize = unitSize
 
-    val numHeight = numPaint.fontMetrics.descent - numPaint.fontMetrics.ascent
-    val unitHeight = unitPaint.fontMetrics.descent - unitPaint.fontMetrics.ascent
-    val gap = 2f
+    val numFm = numPaint.fontMetrics
+    val unitFm = unitPaint.fontMetrics
+    val numHeight = numFm.descent - numFm.ascent
+    val unitHeight = unitFm.descent - unitFm.ascent
+    val gap = 0f
     val totalHeight = numHeight + gap + unitHeight
-    val startY = (size - totalHeight) / 2f
+    val startY = (size - totalHeight) / 2f - 2f
 
-    val numBaseline = startY - numPaint.fontMetrics.ascent
-    val unitBaseline = startY + numHeight + gap - unitPaint.fontMetrics.ascent
+    val numBaseline = startY - numFm.ascent
+    val unitBaseline = startY + numHeight + gap - unitFm.ascent
 
     val x = size / 2f
     canvas.drawText(number, x, numBaseline, numPaint)
