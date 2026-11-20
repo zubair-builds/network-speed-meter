@@ -130,7 +130,7 @@ export default function App() {
   const [apps, setApps] = useState([]);
   const [sessionStart, setSessionStart] = useState(0);
   const [sessionElapsed, setSessionElapsed] = useState(0);
-  const [hasAccess, setHasAccess] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   const [sessionTotal, setSessionTotal] = useState(0);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
