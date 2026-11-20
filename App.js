@@ -151,6 +151,7 @@ export default function App() {
         await NetworkUsage.startSpeedService?.();
         const access = await NetworkUsage.hasUsageAccess?.();
         setHasAccess(!!access);
+        if (access) refreshApps();
         const start = await NetworkUsage.startSession?.();
         if (start) setSessionStart(start);
       } catch (e) {
@@ -165,6 +166,7 @@ export default function App() {
         try {
           const access = await NetworkUsage.hasUsageAccess?.();
           setHasAccess(!!access);
+          if (access) refreshApps();
         } catch (e) {}
       }
     });
