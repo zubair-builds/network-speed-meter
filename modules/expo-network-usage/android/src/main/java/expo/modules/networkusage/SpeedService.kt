@@ -170,7 +170,7 @@ class SpeedService : Service() {
 
   private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
     return when {
-      bytesPerSec < 1024 -> Pair("${bytesPerSec.roundToInt()}", "B/s")
+      bytesPerSec < 1024 -> Pair("0", "KB/s")
       bytesPerSec < 1024 * 1024 -> Pair("${(bytesPerSec / 1024).roundToInt()}", "KB/s")
       else -> {
         val mb = bytesPerSec / (1024.0 * 1024.0)
