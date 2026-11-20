@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.TrafficStats
 import android.os.Build
+import android.os.Process
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -109,6 +110,7 @@ class ExpoNetworkUsageModule : Module() {
         val now = System.currentTimeMillis()
 
         val uidBytes = mutableMapOf<Int, Long>()
+        var tetherBytes = 0L
 
         fun queryAndAdd(networkType: Int) {
           var stats: NetworkStats? = null
@@ -118,9 +120,12 @@ class ExpoNetworkUsageModule : Module() {
             while (stats.hasNextBucket()) {
               stats.getNextBucket(bucket)
               val uid = bucket.uid
-              if (uid < 10000) continue
               val bytes = bucket.rxBytes + bucket.txBytes
-              uidBytes[uid] = (uidBytes[uid] ?: 0L) + bytes
+              if (uid < 10000 || uid == Process.SYSTEM_UID || uid == 0) {
+                tetherBytes += bytes
+              } else {
+                uidBytes[uid] = (uidBytes[uid] ?: 0L) + bytes
+              }
             }
           } catch (e: Exception) {
             e.printStackTrace()
@@ -131,6 +136,14 @@ class ExpoNetworkUsageModule : Module() {
 
         queryAndAdd(ConnectivityManager.TYPE_MOBILE)
         queryAndAdd(ConnectivityManager.TYPE_WIFI)
+
+        // Extra pass for older tether type if present
+        try {
+          val dun = ConnectivityManager::class.java.getField("TYPE_MOBILE_DUN").getInt(null)
+          queryAndAdd(dun)
+        } catch (e: Exception) {
+          // TYPE_MOBILE_DUN not available
+        }
 
         val result = mutableListOf<Map<String, Any>>()
         for ((uid, bytes) in uidBytes) {
@@ -147,6 +160,14 @@ class ExpoNetworkUsageModule : Module() {
             "packageName" to packageName,
             "label" to label,
             "bytes" to bytes
+          ))
+        }
+
+        if (tetherBytes >= 1024) {
+          result.add(mapOf(
+            "packageName" to "hotspot",
+            "label" to "Hotspot",
+            "bytes" to tetherBytes
           ))
         }
 
