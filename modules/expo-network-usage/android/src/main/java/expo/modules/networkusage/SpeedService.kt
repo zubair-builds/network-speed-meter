@@ -156,7 +156,7 @@ class SpeedService : Service() {
         if (deltaTotal > 0) saveTodayTotals()
 
         val rxSpeed = deltaRx / elapsed
-        val (number, unit) = splitSpeed(formatSpeed(rxSpeed))
+        val (number, unit) = formatSpeedParts(rxSpeed)
         updateNotification(number, unit, formatUsage())
       }
     }
@@ -168,20 +168,12 @@ class SpeedService : Service() {
     lastTime = now
   }
 
-  private fun formatSpeed(bytesPerSec: Double): String {
-    if (bytesPerSec < 1024) return "${bytesPerSec.roundToInt()} B/s"
-    if (bytesPerSec < 1024 * 1024) {
-      return "${(bytesPerSec / 1024).roundToInt()} KB/s"
+  private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
+    return when {
+      bytesPerSec < 1024 -> Pair("${bytesPerSec.roundToInt()}", "B")
+      bytesPerSec < 1024 * 1024 -> Pair("${(bytesPerSec / 1024).roundToInt()}", "K")
+      else -> Pair("${(bytesPerSec / (1024 * 1024)).roundToInt()}", "M")
     }
-    return "${(bytesPerSec / (1024 * 1024)).roundToInt()} MB/s"
-  }
-
-  private fun splitSpeed(speed: String): Pair<String, String> {
-    val parts = speed.split(" ")
-    val num = parts.getOrNull(0) ?: speed
-    var unit = parts.getOrNull(1) ?: "B/s"
-    unit = unit.replace("/s", "")
-    return Pair(num, unit)
   }
 
   private fun formatBytes(bytes: Long): String {
@@ -196,37 +188,50 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
-    val size = 48
+    val size = 96
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val numSize = if (number.length > 3) 20f else 26f
-    val unitSize = 12f
+    val inset = 4f
+    val maxWidth = size - inset * 2
 
     val numPaint = Paint().apply {
       color = Color.WHITE
-      textSize = numSize
       isAntiAlias = true
-      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
-      typeface = Typeface.DEFAULT_BOLD
+      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
     val unitPaint = Paint().apply {
       color = Color.WHITE
-      textSize = unitSize
       isAntiAlias = true
       textAlign = Paint.Align.CENTER
-      typeface = Typeface.DEFAULT
+      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    val x = size / 2f
-    val numY = 20f
-    val unitY = 38f
+    var numSize = 52f
+    numPaint.textSize = numSize
+    while (numPaint.measureText(number) > maxWidth && numSize > 20f) {
+      numSize -= 2f
+      numPaint.textSize = numSize
+    }
 
-    canvas.drawText(number, x, numY, numPaint)
-    canvas.drawText(unit, x, unitY, unitPaint)
+    val unitSize = 28f
+    unitPaint.textSize = unitSize
+
+    val numHeight = numPaint.fontMetrics.descent - numPaint.fontMetrics.ascent
+    val unitHeight = unitPaint.fontMetrics.descent - unitPaint.fontMetrics.ascent
+    val gap = 2f
+    val totalHeight = numHeight + gap + unitHeight
+    val startY = (size - totalHeight) / 2f
+
+    val numBaseline = startY - numPaint.fontMetrics.ascent
+    val unitBaseline = startY + numHeight + gap - unitPaint.fontMetrics.ascent
+
+    val x = size / 2f
+    canvas.drawText(number, x, numBaseline, numPaint)
+    canvas.drawText(unit, x, unitBaseline, unitPaint)
 
     return IconCompat.createWithBitmap(bitmap)
   }
@@ -245,9 +250,14 @@ class SpeedService : Service() {
     )
 
     val icon = createSpeedIcon(number, unit)
+    val unitFull = when (unit) {
+      "K" -> "KB/s"
+      "M" -> "MB/s"
+      else -> "B/s"
+    }
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle("Speed: $number $unit/s")
+      .setContentTitle("Speed: $number $unitFull")
       .setContentText(usage)
       .setSmallIcon(icon)
       .setOngoing(true)
