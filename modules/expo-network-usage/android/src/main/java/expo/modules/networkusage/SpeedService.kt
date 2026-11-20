@@ -24,6 +24,8 @@ class SpeedService : Service() {
   private var lastMobileRx = 0L
   private var lastMobileTx = 0L
   private var lastTime = 0L
+  private var zeroCount = 0
+  private var notificationVisible = true
 
   private var todayMobile = 0L
   private var todayWifi = 0L
@@ -33,6 +35,7 @@ class SpeedService : Service() {
   private val NOTIF_ID = 1001
   private val PREFS = "speed_meter_prefs"
   private val MAX_DELTA_BYTES = 50L * 1024 * 1024
+  private val ZERO_HIDE_SECONDS = 5
 
   companion object {
     @Volatile
@@ -156,8 +159,21 @@ class SpeedService : Service() {
         if (deltaTotal > 0) saveTodayTotals()
 
         val rxSpeed = deltaRx / elapsed
-        val (number, unit) = formatSpeedParts(rxSpeed)
-        updateNotification(number, unit, formatUsage())
+
+        if (rxSpeed < 1024) {
+          zeroCount++
+          if (zeroCount >= ZERO_HIDE_SECONDS && notificationVisible) {
+            hideNotification()
+            notificationVisible = false
+          }
+        } else {
+          zeroCount = 0
+          if (!notificationVisible) {
+            notificationVisible = true
+          }
+          val (number, unit) = formatSpeedParts(rxSpeed)
+          updateNotification(number, unit, formatUsage())
+        }
       }
     }
 
@@ -166,6 +182,11 @@ class SpeedService : Service() {
     lastMobileRx = if (mobileSupported) mRx else 0L
     lastMobileTx = if (mobileSupported) mTx else 0L
     lastTime = now
+  }
+
+  private fun hideNotification() {
+    val nm = getSystemService(NotificationManager::class.java)
+    nm.cancel(NOTIF_ID)
   }
 
   private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
@@ -197,7 +218,6 @@ class SpeedService : Service() {
   }
 
   private fun createSpeedIcon(number: String, unit: String): IconCompat {
-    // Wider than tall so 3-digit numbers stay large (matches other app ~18x16 look)
     val width = 160
     val height = 128
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
