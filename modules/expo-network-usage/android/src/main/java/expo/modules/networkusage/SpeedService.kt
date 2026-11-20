@@ -196,7 +196,7 @@ class SpeedService : Service() {
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.TRANSPARENT)
 
-    val inset = 2f
+    val inset = 1f
     val maxWidth = size - inset * 2
 
     val numPaint = Paint().apply {
@@ -210,21 +210,20 @@ class SpeedService : Service() {
     val unitPaint = Paint().apply {
       color = Color.WHITE
       isAntiAlias = true
-      isFakeBoldText = true
       textAlign = Paint.Align.CENTER
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    var numSize = 64f
+    var numSize = 78f
     numPaint.textSize = numSize
-    while (numPaint.measureText(number) > maxWidth && numSize > 22f) {
+    while (numPaint.measureText(number) > maxWidth && numSize > 28f) {
       numSize -= 2f
       numPaint.textSize = numSize
     }
 
-    var unitSize = 28f
+    var unitSize = 22f
     unitPaint.textSize = unitSize
-    while (unitPaint.measureText(unit) > maxWidth && unitSize > 14f) {
+    while (unitPaint.measureText(unit) > maxWidth && unitSize > 12f) {
       unitSize -= 1f
       unitPaint.textSize = unitSize
     }
@@ -233,9 +232,9 @@ class SpeedService : Service() {
     val unitFm = unitPaint.fontMetrics
     val numHeight = numFm.descent - numFm.ascent
     val unitHeight = unitFm.descent - unitFm.ascent
-    val gap = 1f
+    val gap = -2f
     val totalHeight = numHeight + gap + unitHeight
-    val startY = (size - totalHeight) / 2f - 1f
+    val startY = (size - totalHeight) / 2f
 
     val numBaseline = startY - numFm.ascent
     val unitBaseline = startY + numHeight + gap - unitFm.ascent
