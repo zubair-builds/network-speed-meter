@@ -179,7 +179,7 @@ export default function App() {
   const wifiSamplesRef = useRef([]);
   const lastSampleTime = useRef(0);
   const sampleIntervalRef = useRef(30000);
-  const lastMobileRef = useRef({ rx: 0, tx: 0 });
+  const lastMobileRef = useRef(null);
 
   useEffect(() => {
     dailyDataRef.current = dailyData;
@@ -290,8 +290,10 @@ export default function App() {
         AsyncStorage.getItem(`speedSamples_mobile_${today}`),
         AsyncStorage.getItem(`speedSamples_wifi_${today}`),
       ]);
-      mobileSamplesRef.current = mRaw ? JSON.parse(mRaw) : [];
-      wifiSamplesRef.current = wRaw ? JSON.parse(wRaw) : [];
+      const mParsed = mRaw ? JSON.parse(mRaw) : [];
+      const wParsed = wRaw ? JSON.parse(wRaw) : [];
+      mobileSamplesRef.current = Array.isArray(mParsed) ? mParsed : [];
+      wifiSamplesRef.current = Array.isArray(wParsed) ? wParsed : [];
       updateDayStats();
     } catch (e) {}
   };
@@ -393,15 +395,19 @@ export default function App() {
         setSpeedHistory([...hist]);
 
         let isMobile = false;
+        let mobileReady = false;
         if (mobile && mobile.rx >= 0) {
           const prevM = lastMobileRef.current;
-          const dMobile = Math.max(0, (mobile.rx - prevM.rx) + (mobile.tx - prevM.tx));
-          const dTotal = deltaRx + deltaTx;
-          isMobile = dTotal > 0 && dMobile >= dTotal * 0.5;
+          if (prevM) {
+            const dMobile = Math.max(0, (mobile.rx - prevM.rx) + (mobile.tx - prevM.tx));
+            const dTotal = deltaRx + deltaTx;
+            isMobile = dTotal > 0 && dMobile >= dTotal * 0.5;
+            mobileReady = true;
+          }
           lastMobileRef.current = { rx: mobile.rx, tx: mobile.tx };
         }
 
-        if (now - lastSampleTime.current >= sampleIntervalRef.current) {
+        if (mobileReady && now - lastSampleTime.current >= sampleIntervalRef.current) {
           lastSampleTime.current = now;
           saveDaySample(rxBps, isMobile ? 'mobile' : 'wifi');
         }
@@ -547,7 +553,7 @@ export default function App() {
             <View style={styles.sessionDivider} />
             <View style={styles.sessionItem}>
               <Text style={styles.sessionValue}>{formatBytes(sessionTotal)}</Text>
-              <Text style={styles.sessionLabel}>Session Usage</Text>
+              <Text style={styles.sessionLabel}>Today's Usage</Text>
             </View>
           </View>
 
@@ -607,7 +613,7 @@ export default function App() {
             <View style={styles.sessionDivider} />
             <View style={styles.sessionItem}>
               <Text style={styles.sessionValue}>{formatBytes(sessionTotal)}</Text>
-              <Text style={styles.sessionLabel}>Session Usage</Text>
+              <Text style={styles.sessionLabel}>Today's Usage</Text>
             </View>
           </View>
 
@@ -623,7 +629,7 @@ export default function App() {
             </View>
           ) : apps.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>No app usage yet this session.</Text>
+              <Text style={styles.emptyText}>No app usage yet today.</Text>
             </View>
           ) : (
             <FlatList
