@@ -25,6 +25,7 @@ class SpeedService : Service() {
   private var lastMobileTx = 0L
   private var lastTime = 0L
   private var hasBaseline = false
+  private var lastBaselineSave = 0L
 
   private var todayMobile = 0L
   private var todayWifi = 0L
@@ -199,7 +200,10 @@ class SpeedService : Service() {
     lastMobileTx = if (mobileSupported) mTx else 0L
     lastTime = now
     hasBaseline = true
-    saveBaseline()
+    if (now - lastBaselineSave > 15000) {
+      lastBaselineSave = now
+      saveBaseline()
+    }
   }
 
   private fun formatSpeedParts(bytesPerSec: Double): Pair<String, String> {
