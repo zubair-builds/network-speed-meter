@@ -146,11 +146,8 @@ class ExpoNetworkUsageModule : Module() {
           }
         }
 
-        // Mobile: try with subscriber id, then null
+        // Mobile: use subscriber id when available, otherwise null. Never both.
         queryAndAdd(ConnectivityManager.TYPE_MOBILE, subscriberId)
-        if (subscriberId != null) {
-          queryAndAdd(ConnectivityManager.TYPE_MOBILE, null)
-        }
         queryAndAdd(ConnectivityManager.TYPE_WIFI, null)
 
         try {
