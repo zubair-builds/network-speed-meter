@@ -26,16 +26,24 @@ function computeDelta({
   hasBaseline,
   mobileSupported,
 }) {
-  const gap = lastTime > 0 ? now - lastTime : Number.MAX_SAFE_INTEGER;
-  const baselineOk = hasBaseline && gap > 0 && gap < MAX_GAP_MS;
-
-  if (!baselineOk) {
+  if (!hasBaseline) {
     return {
       counted: false,
       deltaMobile: 0,
       deltaWifi: 0,
       deltaTotal: 0,
-      reason: gap >= MAX_GAP_MS ? 'gap' : 'no-baseline',
+      reason: 'no-baseline',
+    };
+  }
+
+  const gap = lastTime > 0 ? now - lastTime : Number.MAX_SAFE_INTEGER;
+  if (gap <= 0 || gap >= MAX_GAP_MS) {
+    return {
+      counted: false,
+      deltaMobile: 0,
+      deltaWifi: 0,
+      deltaTotal: 0,
+      reason: 'gap',
     };
   }
 
