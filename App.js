@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
 import * as Notifications from 'expo-notifications';
 import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -694,6 +695,14 @@ export default function App() {
       )}
       </View>
 
+      <View style={styles.adWrap}>
+        <BannerAd
+          unitId={TestIds.BANNER}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        />
+      </View>
+
       <View style={styles.tabBar}>
         <Pressable
           style={[styles.tab, tab === 'table' && styles.tabActive]}
@@ -866,6 +875,10 @@ const styles = StyleSheet.create({
   },
   grantButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
+  adWrap: {
+    alignItems: 'center',
+    backgroundColor: '#0a0a0a',
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#1a1a1a',
