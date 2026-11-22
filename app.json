@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#121212"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/icon.png"
@@ -29,7 +31,16 @@
         "RECEIVE_BOOT_COMPLETED"
       ]
     },
-    "plugins": ["./plugins/withRemoveSystemAlert"],
+    "plugins": [
+      "./plugins/withRemoveSystemAlert",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
