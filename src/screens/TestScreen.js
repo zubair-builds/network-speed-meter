@@ -1,21 +1,27 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 
 export default function TestScreen() {
-  const [phase, setPhase] = useState('idle'); // idle | ping | down | up | done
+  const [phase, setPhase] = useState('idle');
   const [downMbps, setDownMbps] = useState(0);
   const [upMbps, setUpMbps] = useState(0);
   const [ping, setPing] = useState(0);
   const [error, setError] = useState('');
   const abortRef = useRef(false);
 
+  useEffect(() => {
+    return () => { abortRef.current = true; };
+  }, []);
+
   const measurePing = async () => {
-    const url = 'https://speed.cloudflare.com/__down?bytes=0';
+    const url = 'https://speed.cloudflare.com/__down?bytes=100';
     const times = [];
     for (let i = 0; i < 3; i++) {
+      if (abortRef.current) break;
       const start = Date.now();
       try {
-        await fetch(url, { method: 'HEAD' });
+        const res = await fetch(url);
+        await res.arrayBuffer();
         times.push(Date.now() - start);
       } catch (e) {}
     }
@@ -38,25 +44,26 @@ export default function TestScreen() {
   };
 
   const runUpload = async () => {
-    const chunk = new Uint8Array(500000);
+    const size = 500000;
+    const body = 'x'.repeat(size);
     let totalBytes = 0;
     const start = Date.now();
     for (let i = 0; i < 4; i++) {
       if (abortRef.current) break;
       const res = await fetch('https://speed.cloudflare.com/__up', {
         method: 'POST',
-        body: chunk,
+        body,
         headers: { 'Content-Type': 'application/octet-stream' },
       });
       if (!res.ok) throw new Error('up');
-      totalBytes += chunk.length;
+      totalBytes += size;
       const elapsed = (Date.now() - start) / 1000;
       if (elapsed > 0) setUpMbps((totalBytes * 8) / elapsed / 1_000_000);
     }
   };
 
   const runTest = async () => {
-    if (phase !== 'idle' && phase !== 'done') return;
+    if (phase === 'ping' || phase === 'down' || phase === 'up') return;
     abortRef.current = false;
     setError('');
     setDownMbps(0);
@@ -65,30 +72,38 @@ export default function TestScreen() {
     try {
       setPhase('ping');
       const p = await measurePing();
+      if (abortRef.current) return;
       setPing(p);
       setPhase('down');
       await runDownload();
+      if (abortRef.current) return;
       setPhase('up');
       await runUpload();
+      if (abortRef.current) return;
       setPhase('done');
     } catch (e) {
-      setError('Test failed. Check your connection.');
-      setPhase('idle');
+      if (!abortRef.current) {
+        setError('Test failed. Check your connection.');
+        setPhase('idle');
+      }
     }
   };
 
   const running = phase === 'ping' || phase === 'down' || phase === 'up';
-  const main = phase === 'up' || (phase === 'done' && upMbps > 0 && downMbps === 0)
-    ? upMbps
-    : downMbps;
-  const mainLabel = phase === 'up' ? 'Upload' : phase === 'down' || phase === 'ping' ? 'Download' : 'Download';
+  // When done, show download as the main number
+  const main = phase === 'up' ? upMbps : downMbps;
+  const mainLabel = phase === 'up' ? 'Upload' : 'Download';
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.phase}>{phase === 'idle' ? 'Speed test' : phase === 'done' ? 'Complete' : phase}</Text>
+      <Text style={styles.phase}>
+        {phase === 'idle' ? 'Speed test' : phase === 'done' ? 'Complete' : phase}
+      </Text>
       <Text style={styles.number}>{main > 0 ? main.toFixed(1) : '—'}</Text>
       <Text style={styles.unit}>Mbps</Text>
-      <Text style={styles.hint}>{error || (running ? `${mainLabel}…` : 'Download · Upload · Ping')}</Text>
+      <Text style={styles.hint}>
+        {error || (running ? `${mainLabel}…` : 'Download · Upload · Ping')}
+      </Text>
 
       <View style={styles.stats}>
         <View style={styles.stat}>
@@ -110,7 +125,9 @@ export default function TestScreen() {
         onPress={runTest}
         disabled={running}
       >
-        <Text style={styles.buttonText}>{running ? 'Testing' : phase === 'done' || error ? 'Test again' : 'Start'}</Text>
+        <Text style={styles.buttonText}>
+          {running ? 'Testing' : phase === 'done' || error ? 'Test again' : 'Start'}
+        </Text>
       </Pressable>
     </View>
   );
