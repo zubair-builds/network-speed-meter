@@ -121,9 +121,10 @@ class ExpoNetworkUsageModule : Module() {
         val subscriberId = getSubscriberId(ctx)
 
         val uidBytes = mutableMapOf<Int, Long>()
+        var systemBytes = 0L
         var tetherBytes = 0L
 
-        fun queryAndAdd(networkType: Int, subId: String?) {
+        fun queryAndAdd(networkType: Int, subId: String?, isTether: Boolean) {
           var stats: NetworkStats? = null
           try {
             stats = nsm.querySummary(networkType, subId, from, now)
@@ -133,8 +134,10 @@ class ExpoNetworkUsageModule : Module() {
               val uid = bucket.uid
               val bytes = bucket.rxBytes + bucket.txBytes
               if (bytes <= 0) continue
-              if (uid < 10000 || uid == Process.SYSTEM_UID || uid == 0) {
+              if (isTether || uid == 0) {
                 tetherBytes += bytes
+              } else if (uid < 10000 || uid == Process.SYSTEM_UID) {
+                systemBytes += bytes
               } else {
                 uidBytes[uid] = (uidBytes[uid] ?: 0L) + bytes
               }
@@ -146,15 +149,15 @@ class ExpoNetworkUsageModule : Module() {
           }
         }
 
-        // Mobile: use subscriber id when available, otherwise null. Never both.
-        queryAndAdd(ConnectivityManager.TYPE_MOBILE, subscriberId)
-        queryAndAdd(ConnectivityManager.TYPE_WIFI, null)
+        // Mobile and WiFi for apps; DUN is real tether
+        queryAndAdd(ConnectivityManager.TYPE_MOBILE, subscriberId, false)
+        queryAndAdd(ConnectivityManager.TYPE_WIFI, null, false)
 
         try {
           val dun = ConnectivityManager::class.java.getField("TYPE_MOBILE_DUN").getInt(null)
-          queryAndAdd(dun, subscriberId)
+          queryAndAdd(dun, subscriberId, true)
         } catch (e: Exception) {
-          // not available
+          // TYPE_MOBILE_DUN not available
         }
 
         val result = mutableListOf<Map<String, Any>>()
@@ -190,6 +193,13 @@ class ExpoNetworkUsageModule : Module() {
             "packageName" to "hotspot",
             "label" to "Hotspot",
             "bytes" to tetherBytes
+          ))
+        }
+        if (systemBytes >= 512) {
+          result.add(mapOf(
+            "packageName" to "system",
+            "label" to "System",
+            "bytes" to systemBytes
           ))
         }
 
