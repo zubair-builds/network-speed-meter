@@ -169,6 +169,9 @@ export default function App() {
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [hasAccess, setHasAccess] = useState(false);
   const [sessionTotal, setSessionTotal] = useState(0);
+  const [testSpeed, setTestSpeed] = useState(0);
+  const [testRunning, setTestRunning] = useState(false);
+  const [testDone, setTestDone] = useState(false);
 
   const lastBytesRef = useRef({ totalRx: 0, totalTx: 0, time: Date.now() });
   const dailyDataRef = useRef([]);
@@ -417,6 +420,32 @@ export default function App() {
     }
   };
 
+  const runSpeedTest = async () => {
+    if (testRunning) return;
+    setTestRunning(true);
+    setTestDone(false);
+    setTestSpeed(0);
+    try {
+      const sizes = [1000000, 5000000, 10000000];
+      let totalBytes = 0;
+      const start = Date.now();
+      for (const size of sizes) {
+        const url = `https://speed.cloudflare.com/__down?bytes=${size}`;
+        const res = await fetch(url);
+        const buf = await res.arrayBuffer();
+        totalBytes += buf.byteLength;
+        const elapsed = (Date.now() - start) / 1000;
+        if (elapsed > 0) setTestSpeed(totalBytes / elapsed);
+      }
+      setTestDone(true);
+    } catch (e) {
+      console.log('Speed test error:', e);
+      setTestSpeed(0);
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
   const refreshApps = async () => {
     if (Platform.OS !== 'android') return;
     try {
@@ -642,6 +671,27 @@ export default function App() {
         </>
       )}
 
+      {tab === 'test' && (
+        <View style={styles.testScreen}>
+          <Text style={styles.testNumber}>
+            {testSpeed > 0 ? (testSpeed / (1024 * 1024)).toFixed(1) : '—'}
+          </Text>
+          <Text style={styles.testUnit}>Mbps</Text>
+          <Text style={styles.testHint}>
+            {testRunning ? 'Testing…' : testDone ? 'Complete' : 'Download speed'}
+          </Text>
+          <Pressable
+            style={[styles.testButton, testRunning && styles.testButtonDisabled]}
+            onPress={runSpeedTest}
+            disabled={testRunning}
+          >
+            <Text style={styles.testButtonText}>
+              {testRunning ? 'Testing' : testDone ? 'Test again' : 'Start'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.tabBar}>
         <Pressable
           style={[styles.tab, tab === 'table' && styles.tabActive]}
@@ -660,6 +710,12 @@ export default function App() {
           onPress={() => setTab('apps')}
         >
           <Text style={[styles.tabText, tab === 'apps' && styles.tabTextActive]}>Apps</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, tab === 'test' && styles.tabActive]}
+          onPress={() => setTab('test')}
+        >
+          <Text style={[styles.tabText, tab === 'test' && styles.tabTextActive]}>Test</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -821,4 +877,38 @@ const styles = StyleSheet.create({
   tabActive: { borderTopWidth: 2, borderTopColor: '#4CAF50' },
   tabText: { color: '#888', fontSize: 14 },
   tabTextActive: { color: '#fff', fontWeight: '600' },
+
+  testScreen: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  testNumber: {
+    color: '#fff',
+    fontSize: 96,
+    fontWeight: '300',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -2,
+  },
+  testUnit: {
+    color: '#888',
+    fontSize: 20,
+    marginTop: -8,
+  },
+  testHint: {
+    color: '#555',
+    fontSize: 14,
+    marginTop: 24,
+  },
+  testButton: {
+    marginTop: 40,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  testButtonDisabled: { opacity: 0.5 },
+  testButtonText: { color: '#fff', fontSize: 15 },
 });
