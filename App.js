@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetworkUsage from './modules/expo-network-usage';
 import * as Notifications from 'expo-notifications';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { Ionicons } from '@expo/vector-icons';
 import { useSpeedTracker } from './src/hooks/useSpeedTracker';
 import TableScreen from './src/screens/TableScreen';
 import ChartScreen from './src/screens/ChartScreen';
@@ -258,17 +259,22 @@ export default function App() {
 
       <View style={styles.tabBar}>
         {[
-          { id: 'table', label: 'Table', icon: '☰' },
-          { id: 'chart', label: 'Chart', icon: '⌁' },
-          { id: 'apps', label: 'Apps', icon: '▣' },
-          { id: 'test', label: 'Test', icon: '▶' },
+          { id: 'table', label: 'Table', icon: 'grid-outline' },
+          { id: 'chart', label: 'Chart', icon: 'stats-chart-outline' },
+          { id: 'apps', label: 'Apps', icon: 'apps-outline' },
+          { id: 'test', label: 'Test', icon: 'speedometer-outline' },
         ].map((item) => (
           <Pressable
             key={item.id}
             style={[styles.tab, tab === item.id && styles.tabActive]}
             onPress={() => setTab(item.id)}
           >
-            <Text style={[styles.tabIcon, tab === item.id && styles.tabIconActive]}>{item.icon}</Text>
+            <Ionicons
+              name={item.icon}
+              size={20}
+              color={tab === item.id ? '#fff' : '#888'}
+              style={styles.tabIcon}
+            />
             <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{item.label}</Text>
           </Pressable>
         ))}
@@ -298,8 +304,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   tabActive: { backgroundColor: '#1b5e20' },
-  tabIcon: { color: '#888', fontSize: 16, marginBottom: 2 },
-  tabIconActive: { color: '#fff' },
+  tabIcon: { marginBottom: 2 },
   tabText: { color: '#888', fontSize: 11 },
   tabTextActive: { color: '#fff', fontWeight: '600' },
 });
