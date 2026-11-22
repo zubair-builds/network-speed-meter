@@ -346,6 +346,7 @@ class SpeedService : Service() {
 
   override fun onDestroy() {
     running = false
+    saveBaseline()
     instance = null
     handler.removeCallbacksAndMessages(null)
     super.onDestroy()
