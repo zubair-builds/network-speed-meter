@@ -258,17 +258,18 @@ export default function App() {
 
       <View style={styles.tabBar}>
         {[
-          { id: 'table', label: 'Table' },
-          { id: 'chart', label: 'Chart' },
-          { id: 'apps', label: 'Apps' },
-          { id: 'test', label: 'Test' },
-        ].map((t) => (
+          { id: 'table', label: 'Table', icon: '☰' },
+          { id: 'chart', label: 'Chart', icon: '⌁' },
+          { id: 'apps', label: 'Apps', icon: '▣' },
+          { id: 'test', label: 'Test', icon: '▶' },
+        ].map((item) => (
           <Pressable
-            key={t.id}
-            style={[styles.tab, tab === t.id && styles.tabActive]}
-            onPress={() => setTab(t.id)}
+            key={item.id}
+            style={[styles.tab, tab === item.id && styles.tabActive]}
+            onPress={() => setTab(item.id)}
           >
-            <Text style={[styles.tabText, tab === t.id && styles.tabTextActive]}>{t.label}</Text>
+            <Text style={[styles.tabIcon, tab === item.id && styles.tabIconActive]}>{item.icon}</Text>
+            <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{item.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -297,6 +298,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   tabActive: { backgroundColor: '#1b5e20' },
-  tabText: { color: '#888', fontSize: 13 },
+  tabIcon: { color: '#888', fontSize: 16, marginBottom: 2 },
+  tabIconActive: { color: '#fff' },
+  tabText: { color: '#888', fontSize: 11 },
   tabTextActive: { color: '#fff', fontWeight: '600' },
 });
