@@ -533,6 +533,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
 
+      <View style={styles.content}>
       {tab === 'table' && (
         <>
           <View style={styles.tableHeader}>
@@ -691,6 +692,7 @@ export default function App() {
           </Pressable>
         </View>
       )}
+      </View>
 
       <View style={styles.tabBar}>
         <Pressable
@@ -724,6 +726,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
+  content: { flex: 1 },
   topBar: {
     backgroundColor: '#1a1a1a',
     paddingVertical: 12,
@@ -868,6 +871,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderTopWidth: 1,
     borderTopColor: '#333',
+    paddingBottom: Platform.OS === 'ios' ? 4 : 0,
   },
   tab: {
     flex: 1,
