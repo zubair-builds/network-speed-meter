@@ -881,18 +881,24 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#121212',
     borderTopWidth: 1,
-    borderTopColor: '#333',
-    paddingBottom: Platform.OS === 'ios' ? 4 : 0,
+    borderTopColor: '#1f1f1f',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 8,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     alignItems: 'center',
+    borderRadius: 20,
+    marginHorizontal: 4,
   },
-  tabActive: { borderTopWidth: 2, borderTopColor: '#4CAF50' },
-  tabText: { color: '#888', fontSize: 14 },
+  tabActive: {
+    backgroundColor: '#1b5e20',
+  },
+  tabText: { color: '#888', fontSize: 13 },
   tabTextActive: { color: '#fff', fontWeight: '600' },
 
   testScreen: {
