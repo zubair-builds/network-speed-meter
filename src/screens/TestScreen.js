@@ -1,6 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 
+const FETCH_TIMEOUT = 15000;
+
+async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export default function TestScreen() {
   const [phase, setPhase] = useState('idle');
   const [downMbps, setDownMbps] = useState(0);
@@ -20,7 +33,7 @@ export default function TestScreen() {
       if (abortRef.current) break;
       const start = Date.now();
       try {
-        const res = await fetch(url);
+        const res = await fetchWithTimeout(url, {}, 5000);
         await res.arrayBuffer();
         times.push(Date.now() - start);
       } catch (e) {}
@@ -34,7 +47,7 @@ export default function TestScreen() {
     const start = Date.now();
     for (const size of sizes) {
       if (abortRef.current) break;
-      const res = await fetch(`https://speed.cloudflare.com/__down?bytes=${size}`);
+      const res = await fetchWithTimeout(`https://speed.cloudflare.com/__down?bytes=${size}`);
       if (!res.ok) throw new Error('down');
       const buf = await res.arrayBuffer();
       totalBytes += buf.byteLength;
@@ -50,7 +63,7 @@ export default function TestScreen() {
     const start = Date.now();
     for (let i = 0; i < 4; i++) {
       if (abortRef.current) break;
-      const res = await fetch('https://speed.cloudflare.com/__up', {
+      const res = await fetchWithTimeout('https://speed.cloudflare.com/__up', {
         method: 'POST',
         body,
         headers: { 'Content-Type': 'application/octet-stream' },
@@ -83,14 +96,13 @@ export default function TestScreen() {
       setPhase('done');
     } catch (e) {
       if (!abortRef.current) {
-        setError('Test failed. Check your connection.');
+        setError(e.name === 'AbortError' ? 'Test timed out.' : 'Test failed. Check your connection.');
         setPhase('idle');
       }
     }
   };
 
   const running = phase === 'ping' || phase === 'down' || phase === 'up';
-  // When done, show download as the main number
   const main = phase === 'up' ? upMbps : downMbps;
   const mainLabel = phase === 'up' ? 'Upload' : 'Download';
 
