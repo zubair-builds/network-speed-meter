@@ -70,6 +70,8 @@ export default function App() {
   const [adFailed, setAdFailed] = useState(false);
 
   const dailyDataRef = useRef([]);
+  const lastPersisted = useRef({ mobile: -1, wifi: -1 });
+  const lastPersistTime = useRef(0);
   const appTick = useRef(0);
 
   const speed = useSpeedTracker(sampleInterval);
@@ -174,7 +176,14 @@ export default function App() {
       dailyDataRef.current = data;
       setDailyData([...data]);
       calculateSummary(data);
-      AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
+
+      const now = Date.now();
+      const changed = lastPersisted.current.mobile !== todayEntry.mobile || lastPersisted.current.wifi !== todayEntry.wifi;
+      if (changed && now - lastPersistTime.current > 10000) {
+        lastPersisted.current = { mobile: todayEntry.mobile, wifi: todayEntry.wifi };
+        lastPersistTime.current = now;
+        AsyncStorage.setItem('dailyUsage', JSON.stringify(data)).catch(() => {});
+      }
     } catch (e) {}
   };
 
